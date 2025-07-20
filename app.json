@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Bihari Library",
+    "description": "A unit of Bihari Traders",
+    "slug": "bihari-library",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/bihari.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/bihari.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/bihari.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.tejasvibihari.biharilibrary"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d137ca5d-b08a-41db-bcbc-9209cb3aa65e"
+      }
+    }
+  }
+}
