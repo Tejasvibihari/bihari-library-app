@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
@@ -13,13 +13,15 @@ import {
     Share,
     Alert,
     Linking,
-    Platform
+    Platform,
+    FlatList,
+    RefreshControl
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import Loading from '../components/Loading';
 import client from '../service/axiosClient';
-
+import InvoiceCard from '../components/InvoiceCard';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,16 +30,28 @@ const SingleStudentProfile = ({ route, navigation }) => {
     const [fadeAnim] = useState(new Animated.Value(0));
     const [slideAnim] = useState(new Animated.Value(50));
     const [scaleAnim] = useState(new Animated.Value(0.8));
-    const [invoice, setInvoice] = useState([]);
+    const [invoices, setInvoices] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
+    const passedStudent = route.params?.student;
 
+    // Initialize student and animations
     useEffect(() => {
-        // In real app: setStudent(route.params.student);
-        const passedStudent = route.params?.student;
         if (passedStudent) {
             setStudent(passedStudent);
+            startAnimations();
         }
-        // Animation sequence
+    }, [passedStudent]);
+
+    // Fetch invoices when student is available
+    useEffect(() => {
+        if (passedStudent?.sid) {
+            fetchInvoices();
+        }
+    }, [passedStudent?.sid]);
+
+    const startAnimations = useCallback(() => {
         Animated.parallel([
             Animated.timing(fadeAnim, {
                 toValue: 1,
@@ -55,48 +69,67 @@ const SingleStudentProfile = ({ route, navigation }) => {
                 useNativeDriver: true,
             })
         ]).start();
+    }, [fadeAnim, slideAnim, scaleAnim]);
+
+    const fetchInvoices = useCallback(async () => {
+        if (!passedStudent?.sid) return;
+
+        setLoading(true);
+        try {
+            const response = await client.get(`api/invoice/getinvoicebysid/${passedStudent.sid}`);
+            setInvoices(response.data || []);
+        } catch (error) {
+            // console.error('Error fetching invoices:', error.message);
+            // Alert.alert('Error', 'Failed to fetch invoice details.');
+        } finally {
+            setLoading(false);
+        }
+    }, [passedStudent?.sid]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchInvoices();
+        setRefreshing(false);
+    }, [fetchInvoices]);
+
+    const formatDate = useCallback((dateString) => {
+        if (!dateString) return 'N/A';
+        try {
+            return new Date(dateString).toLocaleDateString('en-IN', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+        } catch (error) {
+            return 'Invalid Date';
+        }
     }, []);
 
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('en-IN', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric'
-        });
-    };
+    const handleShare = useCallback(async () => {
+        if (!student) return;
 
-
-    const handleShare = async () => {
         try {
-            await Share.share({
-                message: `Student Details:\nName: ${student.name}\nSID: ${student.sid}\nShift: ${student.shift}\nTime: ${student.time}\nMobile: ${student.mobile}\nEmail: ${student.email}`,
-            });
+            const message = `Student Details:
+Name: ${student.name || 'N/A'}
+SID: ${student.sid || 'N/A'}
+Shift: ${student.shift || 'N/A'}
+Time: ${student.time || 'N/A'}
+Mobile: ${student.mobile || 'N/A'}
+Email: ${student.email || 'N/A'}`;
+
+            await Share.share({ message });
         } catch (error) {
             Alert.alert('Error', 'Could not share student details');
         }
-    };
-    // useEffect(() => {
-    //     const fetchInvoices = async () => {
-    //         try {
-    //             console.log(student.sid)
-    //             const response = await client.get(`/api/invoice/getinvoicebysid/${student?.sid}`);
-    //             // console.log(response)
-    //             if (response.data && response.data.length > 0) {
-    //                 setInvoice(response.data); // Assuming the first invoice contains the student details
-    //             } else {
-    //                 Alert.alert('No Invoices Found', 'No invoices found for this student.');
-    //             }
-    //         } catch (error) {
-    //             console.error('Error fetching invoices:', error);
-    //             Alert.alert('Error', 'Failed to fetch student details.');
-    //         }
-    //     }
-    //     fetchInvoices();
-    // }, []);
-    const handleCall = () => {
-        const phoneNumber = student.mobile;
-        const phoneUrl = `tel:${phoneNumber}`;
+    }, [student]);
 
+    const handleCall = useCallback(() => {
+        if (!student?.mobile) {
+            Alert.alert('Error', 'No phone number available');
+            return;
+        }
+
+        const phoneUrl = `tel:${student.mobile}`;
         Linking.canOpenURL(phoneUrl)
             .then((supported) => {
                 if (supported) {
@@ -109,18 +142,15 @@ const SingleStudentProfile = ({ route, navigation }) => {
                 Alert.alert('Error', 'Could not open phone dialer');
                 console.error('Error opening dialer:', err);
             });
-    };
+    }, [student?.mobile]);
 
-
-
-    const handleSms = () => {
-        const phone = student.mobile; // Assuming student.phone exists; replace with the actual phone number property if different
-        console.log('SMS to:', phone);
-        if (!phone) {
+    const handleSms = useCallback(() => {
+        if (!student?.mobile) {
             Alert.alert('Error', 'No phone number available for SMS');
             return;
         }
-        const body = `Dear ${student.name},
+
+        const body = `Dear ${student.name || 'Student'},
 
 This is a gentle reminder that your library fee is due. Kindly make the payment at your earliest convenience to continue enjoying uninterrupted library services.
 
@@ -135,7 +165,7 @@ Bihari Library
 🌐 Website: https://biharilibrary.in/`;
 
         const separator = Platform.OS === 'ios' ? '&' : '?';
-        const smsUrl = `sms:${phone}${separator}body=${encodeURIComponent(body)}`;
+        const smsUrl = `sms:${student.mobile}${separator}body=${encodeURIComponent(body)}`;
 
         Linking.canOpenURL(smsUrl)
             .then((supported) => {
@@ -149,20 +179,21 @@ Bihari Library
                 Alert.alert('Error', 'Could not open SMS client');
                 console.error('Error opening SMS:', err);
             });
-    };
+    }, [student?.mobile, student?.name]);
 
-    const handleWhatsApp = () => {
+    const handleWhatsApp = useCallback(() => {
+        if (!student?.mobile) {
+            Alert.alert('Error', 'No phone number available for WhatsApp');
+            return;
+        }
+
         const formattedDate = student.lastPayment
-            ? new Date(student.lastPayment).toLocaleDateString('en-IN', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-            })
+            ? formatDate(student.lastPayment)
             : 'Not Available';
-        const phoneNumber = student.mobile;
-        const message = `Hello ${student.name}, 👋
 
-This is a reminder from *Bihari Library* regarding your membership (SID: ${student.sid}).
+        const message = `Hello ${student.name || 'Student'}, 👋
+
+This is a reminder from *Bihari Library* regarding your membership (SID: ${student.sid || 'N/A'}).
 
 📢 *Your monthly fee is due.*  
 Please make the payment at your earliest convenience to continue enjoying uninterrupted services.
@@ -179,15 +210,14 @@ You can make the payment by visiting the library or through the available method
 Thank you for being a part of Bihari Library.  
 – *Bihari Library*`;
 
-        const whatsappUrl = `whatsapp://send?phone=91${phoneNumber}&text=${encodeURIComponent(message)}`;
+        const whatsappUrl = `whatsapp://send?phone=91${student.mobile}&text=${encodeURIComponent(message)}`;
 
         Linking.canOpenURL(whatsappUrl)
             .then((supported) => {
                 if (supported) {
                     return Linking.openURL(whatsappUrl);
                 } else {
-                    // Fallback to WhatsApp web
-                    const webUrl = `https://wa.me/91${phoneNumber}?text=${encodeURIComponent(message)}`;
+                    const webUrl = `https://wa.me/91${student.mobile}?text=${encodeURIComponent(message)}`;
                     return Linking.openURL(webUrl);
                 }
             })
@@ -195,19 +225,10 @@ Thank you for being a part of Bihari Library.
                 Alert.alert('Error', 'Could not open WhatsApp');
                 console.error('Error opening WhatsApp:', err);
             });
-    };
+    }, [student, formatDate]);
 
-    if (!student) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <View style={styles.loadingContainer}>
-                    <Loading />
-                </View>
-            </SafeAreaView>
-        );
-    }
-
-    const InfoCard = ({ icon, title, value, iconColor = '#8B5CF6' }) => (
+    // Memoized components for better performance
+    const InfoCard = useMemo(() => ({ icon, title, value, iconColor = '#8B5CF6' }) => (
         <Animated.View
             style={[
                 styles.infoCard,
@@ -223,22 +244,41 @@ Thank you for being a part of Bihari Library.
                 </View>
                 <View style={styles.infoTextContainer}>
                     <Text style={styles.infoTitle}>{title}</Text>
-                    <Text style={styles.infoValue}>{value}</Text>
+                    <Text style={styles.infoValue} numberOfLines={2}>{value || 'N/A'}</Text>
                 </View>
             </View>
         </Animated.View>
-    );
+    ), [fadeAnim, slideAnim]);
 
-    const ActionButton = ({ icon, title, onPress, color = '#8B5CF6' }) => (
+    const ActionButton = useMemo(() => ({ icon, title, onPress, color = '#8B5CF6', disabled = false }) => (
         <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: color }]}
-            onPress={onPress}
-            activeOpacity={0.8}
+            style={[
+                styles.actionButton,
+                { backgroundColor: disabled ? '#9CA3AF' : color },
+                disabled && styles.disabledButton
+            ]}
+            onPress={disabled ? null : onPress}
+            activeOpacity={disabled ? 1 : 0.8}
+            disabled={disabled}
         >
-            <Ionicons name={icon} size={24} color="#fff" />
-            <Text style={styles.actionButtonText}>{title}</Text>
+            <Ionicons name={icon} size={20} color="#fff" />
+            <Text style={[styles.actionButtonText, { fontSize: 12 }]}>{title}</Text>
         </TouchableOpacity>
-    );
+    ), []);
+
+    if (!student) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loadingContainer}>
+                    <Loading />
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    const profileImageUri = student.image
+        ? `https://api.biharilibrary.in/uploads/${student.image}`
+        : null;
 
     return (
         <SafeAreaView style={styles.container}>
@@ -272,6 +312,9 @@ Thank you for being a part of Bihari Library.
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
             >
                 {/* Profile Section */}
                 <Animated.View
@@ -285,7 +328,11 @@ Thank you for being a part of Bihari Library.
                 >
                     <View style={styles.profileImageContainer}>
                         <Image
-                            source={{ uri: `https://api.biharilibrary.in/uploads/${student.image}` }}
+                            source={
+                                profileImageUri
+                                    ? { uri: profileImageUri }
+                                    : require('../assets/bihari.png')
+                            }
                             style={styles.profileImage}
                             defaultSource={require('../assets/bihari.png')}
                         />
@@ -300,13 +347,13 @@ Thank you for being a part of Bihari Library.
                     </View>
 
                     <View style={styles.profileInfo}>
-                        <Text style={styles.studentName}>{student.name}</Text>
-                        <Text style={styles.studentId}>SID: {student.sid}</Text>
+                        <Text style={styles.studentName}>{student.name || 'Unknown Student'}</Text>
+                        <Text style={styles.studentId}>SID: {student.sid || 'N/A'}</Text>
                         <View style={[
                             styles.statusBadge,
                             { backgroundColor: student.status === 'Active' ? '#10B981' : '#EF4444' }
                         ]}>
-                            <Text style={styles.statusBadgeText}>{student.status}</Text>
+                            <Text style={styles.statusBadgeText}>{student.status || 'Unknown'}</Text>
                         </View>
                     </View>
                 </Animated.View>
@@ -318,43 +365,52 @@ Thank you for being a part of Bihari Library.
                         title="Call"
                         onPress={handleCall}
                         color="#10B981"
+                        disabled={!student.mobile}
                     />
                     <ActionButton
                         icon="logo-whatsapp"
                         title="WhatsApp"
                         onPress={handleWhatsApp}
                         color="#25D366"
+                        disabled={!student.mobile}
                     />
                     <ActionButton
-                        icon="mail"
+                        icon="chatbubble"
                         title="SMS"
                         onPress={handleSms}
                         color="#3B82F6"
+                        disabled={!student.mobile}
                     />
                 </View>
 
                 {/* Information Cards */}
                 <View style={styles.infoSection}>
-                    <InfoCard
-                        icon="person"
-                        title="Father's Name"
-                        value={student.father}
-                        iconColor="#8B5CF6"
-                    />
+                    {student.father && (
+                        <InfoCard
+                            icon="person"
+                            title="Father's Name"
+                            value={student.father}
+                            iconColor="#8B5CF6"
+                        />
+                    )}
 
-                    <InfoCard
-                        icon="transgender"
-                        title="Gender"
-                        value={student.gender}
-                        iconColor="#EC4899"
-                    />
+                    {student.gender && (
+                        <InfoCard
+                            icon="male-female"
+                            title="Gender"
+                            value={student.gender}
+                            iconColor="#EC4899"
+                        />
+                    )}
 
-                    <InfoCard
-                        icon="location"
-                        title="Address"
-                        value={student.address.replace(/\+/g, ' ')}
-                        iconColor="#10B981"
-                    />
+                    {student.address && (
+                        <InfoCard
+                            icon="location"
+                            title="Address"
+                            value={student.address.replace(/\+/g, ' ')}
+                            iconColor="#10B981"
+                        />
+                    )}
 
                     <InfoCard
                         icon="call"
@@ -377,39 +433,42 @@ Thank you for being a part of Bihari Library.
                         iconColor="#EF4444"
                     />
 
-                    <InfoCard
-                        icon="time"
-                        title="Shift & Time"
-                        value={`${student.shift} (${student.time})`}
-                        iconColor="#8B5CF6"
-                    />
+                    {(student.shift || student.time) && (
+                        <InfoCard
+                            icon="time"
+                            title="Shift & Time"
+                            value={`${student.shift || 'N/A'} (${student.time || 'N/A'})`}
+                            iconColor="#8B5CF6"
+                        />
+                    )}
 
                     <InfoCard
                         icon="card"
                         title="Payment Amount"
-                        value={`₹${student.paymentAmount}`}
+                        value={`₹${student.paymentAmount || 0}`}
                         iconColor="#10B981"
                     />
 
-                    <InfoCard
-                        icon="bookmark"
-                        title="Seat Number"
-                        value={student.seatNumber}
-                        iconColor="#F59E0B"
-                    />
+                    {student.seatNumber && (
+                        <InfoCard
+                            icon="bookmark"
+                            title="Seat Number"
+                            value={student.seatNumber}
+                            iconColor="#F59E0B"
+                        />
+                    )}
 
-                    {/* New fields from the document */}
                     <InfoCard
                         icon="calendar"
                         title="Last Payment Date"
-                        value={student.lastPayment ? formatDate(student.lastPayment) : 'N/A'}
+                        value={formatDate(student.lastPayment)}
                         iconColor="#8B5CF6"
                     />
 
                     <InfoCard
                         icon="calendar-outline"
                         title="Next Payment Date"
-                        value={student.nextPayment ? formatDate(student.nextPayment) : 'N/A'}
+                        value={formatDate(student.nextPayment)}
                         iconColor="#F59E0B"
                     />
 
@@ -417,21 +476,7 @@ Thank you for being a part of Bihari Library.
                         icon="card"
                         title="Payment Due"
                         value={`₹${student.paymentDue || 0}`}
-                        iconColor={student.paymentDue > 0 ? '#EF4444' : '#10B981'}
-                    />
-
-                    <InfoCard
-                        icon="finger-print"
-                        title="Database ID"
-                        value={student._id || 'N/A'}
-                        iconColor="#6B7280"
-                    />
-
-                    <InfoCard
-                        icon="document-text"
-                        title="Version"
-                        value={`v${student.__v || 0}`}
-                        iconColor="#8B5CF6"
+                        iconColor={Number(student.paymentDue) > 0 ? '#EF4444' : '#10B981'}
                     />
 
                     {student.guardian && (
@@ -449,23 +494,45 @@ Thank you for being a part of Bihari Library.
                     <Text style={styles.sectionTitle}>Payment Status</Text>
                     <View style={[
                         styles.paymentStatusCard,
-                        { backgroundColor: student.paymentDue > 0 ? '#FEF2F2' : '#F0FDF4' }
+                        { backgroundColor: Number(student.paymentDue) > 0 ? '#FEF2F2' : '#F0FDF4' }
                     ]}>
                         <View style={styles.paymentStatusContent}>
                             <Ionicons
-                                name={student.paymentDue > 0 ? "warning" : "checkmark-circle"}
+                                name={Number(student.paymentDue) > 0 ? "warning" : "checkmark-circle"}
                                 size={24}
-                                color={student.paymentDue > 0 ? "#EF4444" : "#10B981"}
+                                color={Number(student.paymentDue) > 0 ? "#EF4444" : "#10B981"}
                             />
                             <Text style={[
                                 styles.paymentStatusText,
-                                { color: student.paymentDue > 0 ? "#EF4444" : "#10B981" }
+                                { color: Number(student.paymentDue) > 0 ? "#EF4444" : "#10B981" }
                             ]}>
-                                {student.paymentDue > 0 ? `Payment Due: ₹${student.paymentDue}` : 'Payment Up to Date'}
+                                {Number(student.paymentDue) > 0
+                                    ? `Payment Due: ₹${student.paymentDue}`
+                                    : 'Payment Up to Date'}
                             </Text>
                         </View>
                     </View>
                 </View>
+
+                {/* Invoices Section */}
+                {invoices.length > 0 && (
+                    <View style={styles.invoicesSection}>
+                        <Text style={styles.sectionTitle}>Recent Invoices</Text>
+                        <FlatList
+                            data={invoices}
+                            keyExtractor={(item) => item._id || item.id || Math.random().toString()}
+                            renderItem={({ item }) => <InvoiceCard invoice={item} />}
+                            scrollEnabled={false}
+                            showsVerticalScrollIndicator={false}
+                        />
+                    </View>
+                )}
+
+                {loading && (
+                    <View style={styles.loadingContainer}>
+                        <Loading />
+                    </View>
+                )}
             </ScrollView>
         </SafeAreaView>
     );
@@ -480,6 +547,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        paddingVertical: 20,
     },
     header: {
         paddingTop: 10,
@@ -559,6 +627,7 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#1F2937',
         marginBottom: 5,
+        textAlign: 'center',
     },
     studentId: {
         fontSize: 16,
@@ -584,20 +653,25 @@ const styles = StyleSheet.create({
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
         borderRadius: 25,
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
+        minWidth: 90,
+        justifyContent: 'center',
+    },
+    disabledButton: {
+        opacity: 0.6,
     },
     actionButtonText: {
         color: '#fff',
         fontWeight: '600',
-        marginLeft: 8,
-        fontSize: 14,
+        marginLeft: 6,
+        fontSize: 12,
     },
     infoSection: {
         paddingHorizontal: 20,
@@ -638,6 +712,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#1F2937',
         fontWeight: '600',
+        flexWrap: 'wrap',
     },
     paymentSection: {
         paddingHorizontal: 20,
@@ -667,6 +742,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         marginLeft: 12,
+        flex: 1,
+    },
+    invoicesSection: {
+        paddingHorizontal: 20,
+        marginTop: 20,
     },
 });
 
