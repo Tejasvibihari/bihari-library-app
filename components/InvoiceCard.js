@@ -1,18 +1,27 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     Dimensions,
+    Alert,
+    Image,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons'; // or react-native-vector-icons/Feather
+import axios from 'axios';
+import client from '../service/axiosClient';
 
 const { width } = Dimensions.get('window');
 
 const InvoiceCard = ({
     invoice,
-    onPress = () => { }
+    onPress = () => { },
+    onDelete = () => { }, // Optional callback after successful deletion
+    // Configure your API endpoint
 }) => {
+    const [student, setStudent] = useState(null);
+    const [loading, setLoading] = useState(false);
     // Format date helper
     const formatDate = (dateString) => {
         const date = new Date(dateString);
@@ -22,7 +31,6 @@ const InvoiceCard = ({
             year: 'numeric'
         });
     };
-
 
     // Format currency helper
     const formatCurrency = (amount) => {
@@ -40,6 +48,58 @@ const InvoiceCard = ({
         }
     };
 
+    // Delete invoice function
+    const handleDelete = async () => {
+        Alert.alert(
+            "Delete Invoice",
+            "Are you sure you want to delete this invoice? This action cannot be undone.",
+            [
+                {
+                    text: "Cancel",
+                    style: "cancel"
+                },
+                {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => deleteInvoice()
+                }
+            ]
+        );
+    };
+
+    useEffect(() => {
+        const fetchAllStudent = async () => {
+            try {
+                setLoading(true)
+                const response = await client.get(`/api/student/getstudentbysid/${invoice?.sid}`);
+                setStudent(response.data);
+                setLoading(false);
+            } catch (error) {
+                setLoading(false);
+                console.log(error);
+            }
+        }
+        fetchAllStudent();
+    }, [invoice])
+
+    const deleteInvoice = async () => {
+        try {
+            const response = await client.delete(`/api/invoice/deleteinvoice/${invoice?._id}/${invoice?.sid}`);
+
+            if (response.status === 200 || response.status === 204) {
+                // Success - call the onDelete callback
+                onDelete(invoice._id);
+                Alert.alert("Success", "Invoice deleted successfully");
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            Alert.alert(
+                "Error",
+                error.response?.data?.message || "Failed to delete invoice. Please try again."
+            );
+        }
+    };
+
     const paymentStatus = getPaymentStatus();
 
     return (
@@ -48,18 +108,47 @@ const InvoiceCard = ({
             onPress={onPress}
             activeOpacity={0.8}
         >
-            {/* Header with SID and Status */}
+            {/* Header with Profile, Info, Status, and Delete Button */}
             <View style={styles.header}>
-                <View style={styles.invoiceInfo}>
-                    <Text style={styles.studentId}>SID: {invoice.sid}</Text>
-                    <Text style={styles.invoiceIdHeader}>#{invoice._id.slice(-8)}</Text>
+                <View style={styles.leftSection}>
+                    {/* Student Profile Picture */}
+                    <Image
+                        source={
+                            student?.image
+                                ? { uri: `https://api.biharilibrary.in/uploads/${student?.image}` }
+                                : require('../assets/bihari.png') // fallback image
+                        }
+                        style={styles.profilePicture}
+                        defaultSource={require('../assets/bihari.png')} // (for Android fade-in)
+                        resizeMode="cover"
+                    />
+
+                    {/* Student Info */}
+                    <View style={styles.invoiceInfo}>
+                        <Text style={styles.studentId}>SID: {invoice.sid}</Text>
+                        {student?.name && (
+                            <Text style={styles.studentName}>{student.name}</Text>
+                        )}
+                        <Text style={styles.invoiceIdHeader}>#{invoice._id.slice(-8)}</Text>
+                    </View>
                 </View>
 
-                {/* Status Badge */}
-                <View style={[styles.statusBadge, { backgroundColor: paymentStatus.bgColor }]}>
-                    <Text style={[styles.statusText, { color: paymentStatus.color }]}>
-                        {paymentStatus.status}
-                    </Text>
+                <View style={styles.headerActions}>
+                    {/* Status Badge */}
+                    <View style={[styles.statusBadge, { backgroundColor: paymentStatus.bgColor }]}>
+                        <Text style={[styles.statusText, { color: paymentStatus.color }]}>
+                            {paymentStatus.status}
+                        </Text>
+                    </View>
+
+                    {/* Delete Button */}
+                    <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={handleDelete}
+                        activeOpacity={0.7}
+                    >
+                        <Feather name="trash-2" size={18} color="#EF4444" />
+                    </TouchableOpacity>
                 </View>
             </View>
 
@@ -156,19 +245,43 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 16,
     },
+    leftSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
+    profilePicture: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        marginRight: 12,
+        borderWidth: 2,
+        borderColor: '#E5E7EB',
+    },
     invoiceInfo: {
         flex: 1,
     },
     studentId: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '600',
         color: '#1F2937',
         marginBottom: 2,
     },
-    invoiceIdHeader: {
+    studentName: {
         fontSize: 14,
         color: '#6B7280',
         fontWeight: '500',
+        marginBottom: 2,
+    },
+    invoiceIdHeader: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        fontWeight: '400',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
     },
     statusBadge: {
         paddingHorizontal: 12,
@@ -179,6 +292,13 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         textTransform: 'uppercase',
+    },
+    deleteButton: {
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: '#FEF2F2',
+        borderWidth: 1,
+        borderColor: '#FECACA',
     },
     detailsContainer: {
         marginBottom: 16,

@@ -13,6 +13,7 @@ export default function AllInvoiceScreen() {
     const [loading, setLoading] = useState(true);
     const [searchText, setSearchText] = useState('')
     const [filteredInvoices, setFilteredInvoices] = useState([]);
+
     useEffect(() => {
         if (searchText.trim() === '') {
             setFilteredInvoices([]); // Or set to allStudent if you want to show all by default
@@ -43,10 +44,22 @@ export default function AllInvoiceScreen() {
                 setLoading(false);
             }
         }
+
         fetchAllInvoice();
     }, [])
 
+    // Add this callback function to handle invoice deletion
+    const handleDeleteInvoice = (deletedInvoiceId) => {
+        // Remove the deleted invoice from allInvoices state
+        setAllInvoices(prevInvoices =>
+            prevInvoices.filter(invoice => invoice._id !== deletedInvoiceId)
+        );
 
+        // Also update filteredInvoices if it contains the deleted invoice
+        setFilteredInvoices(prevFiltered =>
+            prevFiltered.filter(invoice => invoice._id !== deletedInvoiceId)
+        );
+    };
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#8B5CF6" />
@@ -83,9 +96,11 @@ export default function AllInvoiceScreen() {
                 ) : (
                     <FlatList
                         data={filteredInvoices && filteredInvoices.length > 0 ? filteredInvoices : allInvoices}
-                        keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+                        // keyExtractor={(item, index) => item.id?.toString() || index.toString()}
+                        keyExtractor={(item, index) => item._id?.toString() || index.toString()}
+
                         renderItem={({ item }) => (
-                            <InvoiceCard invoice={item} />
+                            <InvoiceCard invoice={item} onDelete={handleDeleteInvoice} />
                         )}
                         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
                     />
