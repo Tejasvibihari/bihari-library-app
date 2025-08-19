@@ -135,6 +135,12 @@ const Home = ({ navigation }) => {
         allStudent.filter(student => student.status === "Pending").slice(0, 10),
         [allStudent]
     );
+    const recentStudents = useMemo(() => {
+        return [...allStudent]
+            .sort((a, b) => new Date(b.admissionDate) - new Date(a.admissionDate)) // newest first
+            .slice(0, 10); // pick top 10
+    }, [allStudent]);
+
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -220,6 +226,26 @@ const Home = ({ navigation }) => {
                         onPress={() => navigateToStudents('Inactive')}
                     />
                 </View>
+
+                <Text style={styles.sectionHeader}>
+                    Recent Admission ({recentStudents.length})
+                </Text>
+
+                <FlatList
+                    data={recentStudents}
+                    keyExtractor={(item) => item._id || item.sid}
+                    renderItem={renderPendingItem}
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.pendingList}
+                    contentContainerStyle={styles.pendingListContent}
+                    getItemLayout={(data, index) => ({
+                        length: width * 0.2 + 12,
+                        offset: (width * 0.2 + 12) * index,
+                        index,
+                    })}
+                />
+
 
                 {/* Pending Students Section */}
                 {pendingStudents.length > 0 && (

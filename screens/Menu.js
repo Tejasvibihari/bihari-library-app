@@ -35,6 +35,14 @@ const Menu = () => {
             screen: 'TrashStudent',
             color: '#8B5CF6'
         },
+        // {
+        //     id: 2,
+        //     title: 'Camera',
+        //     subtitle: 'Watch Live Video',
+        //     icon: 'camera',
+        //     screen: 'CameraScreen',
+        //     color: '#8B5CF6'
+        // },
         {
             id: 3,
             title: 'Log Out',

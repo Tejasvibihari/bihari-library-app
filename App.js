@@ -11,6 +11,7 @@ import Menu from './screens/Menu';
 import TrashStudentScreen from './screens/TrashStudentScreen';
 import AllInvoiceScreen from './screens/AllInvoiceScreen';
 import AuthLoadingScreen from './screens/AuthLoadingScreen';
+import EditStudentProfile from './screens/EditStudentProfile';
 
 const Stack = createNativeStackNavigator();
 export default function App() {
@@ -61,6 +62,11 @@ export default function App() {
           name="AllInvoice"
           component={AllInvoiceScreen}
           options={{ title: 'All Invoice', headerShown: false }}
+        />
+        <Stack.Screen
+          name="EditStudentProfile"
+          component={EditStudentProfile}
+          options={{ headerShown: false }}
         />
         {/* Add more screens as needed */}
       </Stack.Navigator>

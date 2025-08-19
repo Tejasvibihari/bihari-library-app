@@ -4,11 +4,13 @@ import { useState } from 'react';
 import axios from 'axios';
 import client from "../service/axiosClient";
 
-export const StudentCard = ({ student, onPress }) => {
+export const StudentCard = ({ student, onPress, onDelete }) => {
     const navigation = useNavigation();
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [extraDueAmount, setExtraDueAmount] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const handleCardPress = () => {
         navigation.navigate('SingleStudentProfile', { student }); // Pass the student data
@@ -19,9 +21,18 @@ export const StudentCard = ({ student, onPress }) => {
         setShowPaymentModal(true);
     };
 
+    const handleDeleteButtonPress = (e) => {
+        e.stopPropagation(); // Prevent card click
+        setShowDeleteModal(true);
+    };
+
     const handleCancelPayment = () => {
         setShowPaymentModal(false);
         setExtraDueAmount('');
+    };
+
+    const handleCancelDelete = () => {
+        setShowDeleteModal(false);
     };
 
     const handleConfirmPayment = async () => {
@@ -64,6 +75,45 @@ export const StudentCard = ({ student, onPress }) => {
             );
         } finally {
             setIsProcessing(false);
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (isDeleting) return;
+
+        setIsDeleting(true);
+        console.log(student._id)
+        try {
+            // Replace with your actual delete API endpoint
+            const response = await client.get(`/api/student/delete?studentId=${student._id}`);
+
+            if (response.status === 200 || response.data.message === 'Student deleted successfully.') {
+                Alert.alert(
+                    'सफलता',
+                    'छात्र सफलतापूर्वक हटा दिया गया!',
+                    [{ text: 'ठीक है' }]
+                );
+                setShowDeleteModal(false);
+                // Call the onDelete callback to update the parent component
+                if (onDelete) {
+                    onDelete(student.sid);
+                }
+            } else {
+                Alert.alert(
+                    'त्रुटि',
+                    'छात्र को हटाने में समस्या आई।',
+                    [{ text: 'ठीक है' }]
+                );
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            Alert.alert(
+                'त्रुटि',
+                'छात्र को हटाने में समस्या आई।',
+                [{ text: 'ठीक है' }]
+            );
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -150,8 +200,16 @@ export const StudentCard = ({ student, onPress }) => {
                     </View>
                 </View>
 
-                {/* Payment Button Section */}
-                <View style={styles.paymentSection}>
+                {/* Action Buttons Section */}
+                <View style={styles.actionButtonsSection}>
+                    <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={handleDeleteButtonPress}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.deleteButtonText}>हटाएं</Text>
+                    </TouchableOpacity>
+
                     <TouchableOpacity
                         style={styles.paymentButton}
                         onPress={handlePaymentButtonPress}
@@ -205,6 +263,53 @@ export const StudentCard = ({ student, onPress }) => {
                             >
                                 <Text style={styles.confirmButtonText}>
                                     {isProcessing ? 'प्रोसेस हो रहा है...' : 'भुगतान पुष्टि करें'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Delete Confirmation Modal */}
+            <Modal
+                visible={showDeleteModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={handleCancelDelete}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalTitle}>छात्र हटाएं</Text>
+                        <Text style={styles.studentNameModal}>{student?.name || 'N/A'}</Text>
+
+                        <View style={styles.warningContainer}>
+                            <Text style={styles.warningText}>⚠️ चेतावनी</Text>
+                            <Text style={styles.warningDescription}>
+                                क्या आप वाकई इस छात्र को हटाना चाहते हैं? यह क्रिया वापस नहीं की जा सकती।
+                            </Text>
+                        </View>
+
+                        <View style={styles.studentInfoContainer}>
+                            <Text style={styles.studentInfoText}>छात्र ID: {student?.sid || 'N/A'}</Text>
+                            <Text style={styles.studentInfoText}>सीट नंबर: {student?.seatNumber || 'N/A'}</Text>
+                        </View>
+
+                        <View style={styles.buttonContainer}>
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.cancelButton]}
+                                onPress={handleCancelDelete}
+                                disabled={isDeleting}
+                            >
+                                <Text style={styles.cancelButtonText}>रद्द करें</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.modalButton, styles.deleteConfirmButton, isDeleting && styles.disabledButton]}
+                                onPress={handleConfirmDelete}
+                                disabled={isDeleting}
+                            >
+                                <Text style={styles.deleteConfirmButtonText}>
+                                    {isDeleting ? 'हटा रहे हैं...' : 'हटाएं'}
                                 </Text>
                             </TouchableOpacity>
                         </View>
@@ -299,10 +404,29 @@ const styles = StyleSheet.create({
         flex: 2,
         textAlign: 'right',
     },
-    // Payment Button Styles
-    paymentSection: {
+    // Action Buttons Styles
+    actionButtonsSection: {
         marginTop: 16,
-        alignItems: 'flex-end',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 12,
+    },
+    deleteButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: '#EF4444',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    deleteButtonText: {
+        color: '#ffffff',
+        fontSize: 14,
+        fontWeight: '600',
     },
     paymentButton: {
         paddingVertical: 8,
@@ -385,6 +509,39 @@ const styles = StyleSheet.create({
         marginBottom: 24,
         backgroundColor: '#ffffff',
     },
+    // Warning styles for delete modal
+    warningContainer: {
+        backgroundColor: '#FEF2F2',
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 16,
+        borderLeftWidth: 4,
+        borderLeftColor: '#EF4444',
+    },
+    warningText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#EF4444',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    warningDescription: {
+        fontSize: 14,
+        color: '#7F1D1D',
+        textAlign: 'center',
+        lineHeight: 20,
+    },
+    studentInfoContainer: {
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 20,
+    },
+    studentInfoText: {
+        fontSize: 14,
+        color: '#6B7280',
+        marginBottom: 4,
+    },
     buttonContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -411,6 +568,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#8B5CF6',
     },
     confirmButtonText: {
+        color: '#ffffff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    deleteConfirmButton: {
+        backgroundColor: '#EF4444',
+    },
+    deleteConfirmButtonText: {
         color: '#ffffff',
         fontSize: 16,
         fontWeight: '600',

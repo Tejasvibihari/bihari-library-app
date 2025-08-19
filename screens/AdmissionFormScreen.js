@@ -35,6 +35,16 @@ const NewAdmissionForm = () => {
     const [admissionDateObj, setAdmissionDateObj] = useState(new Date());
     const [lastPaymentDateObj, setLastPaymentDateObj] = useState(new Date());
 
+    // Time options map
+    const timeOptions = {
+        Morning: ["07:00 AM - 11:00 AM", "07:00 AM - 07:00 PM"],
+        Afternoon: ["11:00 AM - 03:00 PM"],
+        Evening: ["03:00PM - 07:00PM"],
+        Night: ["07:00 PM - 11:00 PM", "07:00 PM - 07:00 AM"],
+        Double: ["07:00 AM - 03:00 PM", "11:00 AM - 07:00 PM"],
+        "24Hours": ["24 Hours"]
+    };
+
     const pickImage = async () => {
         Alert.alert(
             'Select Image Source',
@@ -49,16 +59,26 @@ const NewAdmissionForm = () => {
                             return;
                         }
                         const result = await ImagePicker.launchCameraAsync({
-                            base64: true,
                             allowsEditing: true,
                             aspect: [1, 1],
-                            quality: 1,
+                            quality: 0.7, // Reduced quality for better upload
+                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
                         });
 
-                        if (!result.canceled) {
-                            const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-                            setImage(base64);
-                            setImagePreview(base64);
+                        if (!result.canceled && result.assets && result.assets.length > 0) {
+                            const asset = result.assets[0];
+
+                            // Fixed image object with proper MIME type
+                            const imageObj = {
+                                uri: asset.uri,
+                                type: asset.mimeType || "image/jpeg", // Use mimeType instead of type
+                                name: asset.fileName || `photo_${Date.now()}.jpg`,
+                                size: asset.fileSize || 0
+                            };
+
+                            // console.log('Image selected:', imageObj);
+                            setImage(imageObj);
+                            setImagePreview(asset.uri);
                             Alert.alert('✅ Success', 'Image captured successfully');
                         }
                     },
@@ -72,16 +92,26 @@ const NewAdmissionForm = () => {
                             return;
                         }
                         const result = await ImagePicker.launchImageLibraryAsync({
-                            base64: true,
                             allowsEditing: true,
                             aspect: [1, 1],
-                            quality: 1,
+                            quality: 0.7, // Reduced quality for better upload
+                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
                         });
 
-                        if (!result.canceled) {
-                            const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-                            setImage(base64);
-                            setImagePreview(base64);
+                        if (!result.canceled && result.assets && result.assets.length > 0) {
+                            const asset = result.assets[0];
+
+                            // Fixed image object with proper MIME type
+                            const imageObj = {
+                                uri: asset.uri,
+                                type: asset.mimeType || "image/jpeg", // Use mimeType instead of type
+                                name: asset.fileName || `photo_${Date.now()}.jpg`,
+                                size: asset.fileSize || 0
+                            };
+
+                            // console.log('Image selected:', imageObj);
+                            setImage(imageObj);
+                            setImagePreview(asset.uri);
                             Alert.alert('✅ Success', 'Image selected successfully');
                         }
                     },
@@ -94,6 +124,14 @@ const NewAdmissionForm = () => {
             { cancelable: true }
         );
     };
+
+    const handleShiftChange = (selectedShift) => {
+        setShift(selectedShift);
+        setTime(''); // reset time to avoid invalid selection
+        setSeatShift('');
+        setVacantSeat([]); // Clear vacant seats when shift changes
+    };
+
     const handleTimeChange = async (selectedTime) => {
         setTime(selectedTime);
         let amount = 0;
@@ -145,25 +183,25 @@ const NewAdmissionForm = () => {
         setSeatShift(newSeatShift);
 
         if (newSeatShift) {
-
             try {
+                setLoading(true);
                 const response = await client.get(`/api/seat/getVacantSeatsByShift`, {
                     params: { seatShift: newSeatShift },
                 });
                 setVacantSeat(response.data || []);
-
+                setLoading(false);
             } catch (error) {
+                setLoading(false);
                 console.error('Error fetching seats:', error.response?.data || error.message);
-
+                Alert.alert('⚠️ Warning', 'Failed to fetch available seats');
+                setVacantSeat([]);
             }
         }
     };
 
-
     const handleSeatChange = (selectedSeat) => {
         setSeatNumber(selectedSeat);
     }
-
 
     // Date picker handlers
     const onAdmissionDateChange = (event, selectedDate) => {
@@ -174,7 +212,6 @@ const NewAdmissionForm = () => {
         const formattedDate = currentDate.toISOString().split('T')[0];
         setAdmissionDate(formattedDate);
     };
-
 
     const onLastPaymentDateChange = (event, selectedDate) => {
         const currentDate = selectedDate || lastPaymentDateObj;
@@ -189,74 +226,169 @@ const NewAdmissionForm = () => {
         setShowAdmissionDatePicker(true);
     };
 
-    console.log("Rerender AdmissionFormScreen");
+    // Enhanced form validation
+    const validateForm = () => {
+        const errors = [];
 
+        if (!name.trim()) errors.push('Name is required');
+        if (!email.trim()) errors.push('Email is required');
+        if (!mobile.trim()) errors.push('Mobile number is required');
+        if (!father.trim()) errors.push("Father's name is required");
+        if (!guardian.trim()) errors.push('Guardian mobile number is required');
+        if (!admissionDate) errors.push('Admission date is required');
+        if (!shift) errors.push('Shift is required');
+        if (!time) errors.push('Time is required');
+        if (!paymentAmount) errors.push('Payment amount is required');
+        if (!address.trim()) errors.push('Address is required');
+        if (!image) errors.push('Profile image is required');
+        if (!seatNumber) errors.push('Seat number is required');
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (email && !emailRegex.test(email)) {
+            errors.push('Please enter a valid email address');
+        }
+
+        // Mobile number validation (basic)
+        if (mobile && mobile.length < 10) {
+            errors.push('Mobile number should be at least 10 digits');
+        }
+
+        if (guardian && guardian.length < 10) {
+            errors.push('Guardian mobile number should be at least 10 digits');
+        }
+
+        return errors;
+    };
+
+    // console.log("Rerender AdmissionFormScreen");
 
     const handleSubmit = async () => {
-        if (!name || !email || !mobile || !father || !guardian || !gender || !admissionDate || !shift || !time || !paymentAmount || !address || !image || !seatNumber) {
-            Alert.alert('⚠️ Warning', 'Please fill all fields and select an image');
+        // Enhanced validation
+        const validationErrors = validateForm();
+        if (validationErrors.length > 0) {
+            Alert.alert('⚠️ Validation Error', validationErrors.join('\n'));
             return;
         }
 
-        const data = {
-            name,
-            email,
-            mobile,
-            father,
-            guardian,
-            gender,
-            admissionDate,
-            shift,
-            time,
-            paymentAmount: parseFloat(paymentAmount),
-            address,
-            image,
-            seatNumber,
-            seatShift
-
-        };
+        // Check image size (optional - you can adjust the limit)
+        if (image && image.size && image.size > 5 * 1024 * 1024) { // 5MB limit
+            Alert.alert('⚠️ Image Too Large', 'Please select an image smaller than 5MB');
+            return;
+        }
 
         setLoading(true);
+
         try {
-            const response = await client.post('/api/student/create-new-student', data);
+            // Create FormData properly for React Native
+            const formData = new FormData();
+
+            // Append all text fields
+            formData.append("name", name.trim());
+            formData.append("email", email.trim().toLowerCase());
+            formData.append("mobile", mobile.trim());
+            formData.append("father", father.trim());
+            formData.append("guardian", guardian.trim());
+            formData.append("gender", gender);
+            formData.append("admissionDate", admissionDate);
+            formData.append("shift", shift);
+            formData.append("time", time);
+            formData.append("paymentAmount", paymentAmount.toString());
+            formData.append("address", address.trim());
+            formData.append("seatNumber", seatNumber);
+            formData.append("seatShift", seatShift);
+
+            // Add lastPayment if available
+            if (lastPayment) {
+                formData.append("lastPayment", lastPayment);
+            }
+
+            // Handle image properly for React Native
+            if (image) {
+                // React Native specific image object
+                formData.append("image", {
+                    uri: image.uri,
+                    type: image.type || "image/jpeg",
+                    name: image.name || `student_${Date.now()}.jpg`,
+                });
+            }
+
+            console.log('Submitting form...');
+
+            // CRITICAL FIX: Use fetch instead of axios for FormData in React Native
+            const response = await fetch(`${client.defaults.baseURL}/api/student/create-new-student`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'Accept': 'application/json',
+                },
+            });
+
+            const responseData = await response.json();
             setLoading(false);
-            // console.log('Response:', response);
+
             if (response.status === 201) {
-                Alert.alert('🎉 Success', response.data.message || 'Admission Success');
-                setName('');
-                setEmail('');
-                setMobile('');
-                setFather('');
-                setGuardian('');
-                setGender('Male');
-                setAdmissionDate('');
-                setShift('');
-                setTime('');
-                setPaymentAmount('');
-                setAddress('');
-                setImage(null);
-                setImagePreview(null);
-                setLastPayment('');
-                setSeatNumber('');
-                setSeatShift('');
+                Alert.alert(
+                    '🎉 Success',
+                    responseData.message || 'Student admission completed successfully!',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => {
+                                resetForm();
+                            }
+                        }
+                    ]
+                );
+            } else {
+                // Handle non-201 responses
+                throw new Error(responseData.message || `Server returned status ${response.status}`);
             }
 
         } catch (error) {
             setLoading(false);
-            if (error.response) {
-                const status = error.response.status;
-                const message = error.response.data.message || 'An error occurred';
-                if (status === 400) {
-                    Alert.alert('❌ Error', message);
-                } else if (status === 500) {
-                    Alert.alert('❌ Error', 'Internal Server Error');
-                } else {
-                    Alert.alert('❌ Error', message);
-                }
+            console.error('Submission error:', error);
+
+            // Check if it's a fetch error vs parsing error
+            if (error.name === 'TypeError' && error.message.includes('Network request failed')) {
+                Alert.alert(
+                    '🌐 Network Error',
+                    'Unable to connect to server. Please check your internet connection and try again.'
+                );
+            } else if (error.message.includes('JSON')) {
+                Alert.alert(
+                    '❌ Server Error',
+                    'Server returned invalid response. Please try again.'
+                );
             } else {
-                Alert.alert('❌ Error', 'Network error or server unreachable');
+                Alert.alert(
+                    '❌ Error',
+                    error.message || 'An unexpected error occurred'
+                );
             }
         }
+    };
+
+    // Helper function to reset form
+    const resetForm = () => {
+        setName('');
+        setEmail('');
+        setMobile('');
+        setFather('');
+        setGuardian('');
+        setGender('Male');
+        setAdmissionDate('');
+        setShift('');
+        setTime('');
+        setPaymentAmount('');
+        setAddress('');
+        setImage(null);
+        setImagePreview(null);
+        setLastPayment('');
+        setSeatNumber('');
+        setSeatShift('');
+        setVacantSeat([]);
     };
 
     const DatePickerField = ({ label, value, onPress, icon }) => (
@@ -297,12 +429,6 @@ const NewAdmissionForm = () => {
 
     return (
         <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-            {/* Header with Gradient Background */}
-            {/* <View style={styles.headerContainer}>
-                <Text style={styles.headerEmoji}>🎓</Text>
-                <Text style={styles.header}>New Student Admission</Text>
-                <Text style={styles.subHeader}>Fill in the details below</Text>
-            </View> */}
             <TopHeader heading='New Admission Form' />
 
             {/* Profile Image Section */}
@@ -324,6 +450,11 @@ const NewAdmissionForm = () => {
                         </View>
                     )}
                 </TouchableOpacity>
+                {/* {image && (
+                    <Text style={styles.imageInfo}>
+                        📁 {image.name} ({image.size ? `${(image.size / 1024).toFixed(1)}KB` : 'Size unknown'})
+                    </Text>
+                )} */}
             </View>
 
             {/* Personal Information Section */}
@@ -337,7 +468,6 @@ const NewAdmissionForm = () => {
                     placeholder="Enter your full name"
                     icon="✏️"
                 />
-
                 <InputField
                     label="Email Address"
                     value={email}
@@ -345,8 +475,8 @@ const NewAdmissionForm = () => {
                     placeholder="Enter your email"
                     keyboardType="email-address"
                     icon="📧"
+                    autoCapitalize="none"
                 />
-
                 <InputField
                     label="Mobile Number"
                     value={mobile}
@@ -354,8 +484,8 @@ const NewAdmissionForm = () => {
                     placeholder="Enter mobile number"
                     keyboardType="phone-pad"
                     icon="📱"
+                    maxLength={15}
                 />
-
                 <InputField
                     label="Father's Name"
                     value={father}
@@ -363,7 +493,6 @@ const NewAdmissionForm = () => {
                     placeholder="Enter father's name"
                     icon="👨"
                 />
-
                 <InputField
                     label="Guardian Mobile Number"
                     value={guardian}
@@ -371,6 +500,7 @@ const NewAdmissionForm = () => {
                     placeholder="Enter guardian Mobile Number"
                     keyboardType="phone-pad"
                     icon="🤝"
+                    maxLength={15}
                 />
 
                 <GenderPicker />
@@ -397,56 +527,76 @@ const NewAdmissionForm = () => {
                 />
 
                 {/* Shift Picker */}
-                <Text style={styles.label}>🕐 Shift</Text>
-                <View style={styles.pickerWrapper}>
-                    <Picker
-                        selectedValue={shift}
-                        onValueChange={(itemValue) => setShift(itemValue)}
-                    >
-                        <Picker.Item label="Select shift" value="" />
-                        <Picker.Item label="Morning" value="Morning" />
-                        <Picker.Item label="Afternoon" value="Afternoon" />
-                        <Picker.Item label="Evening" value="Evening" />
-                        <Picker.Item label="Night" value="Night" />
-                        <Picker.Item label="Double Shift" value="Double" />
-                        <Picker.Item label="24 Hours" value="24Hours" />
-                    </Picker>
+                <View style={styles.inputContainer}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.inputIcon}>🕐</Text>
+                        <Text style={styles.label}>Shift</Text>
+                    </View>
+                    <View style={styles.pickerContainer}>
+                        <Picker
+                            selectedValue={shift}
+                            onValueChange={handleShiftChange}
+                            style={styles.picker}
+                        >
+                            <Picker.Item label="Select shift" value="" />
+                            <Picker.Item label="Morning" value="Morning" />
+                            <Picker.Item label="Afternoon" value="Afternoon" />
+                            <Picker.Item label="Evening" value="Evening" />
+                            <Picker.Item label="Night" value="Night" />
+                            <Picker.Item label="Double Shift" value="Double" />
+                            <Picker.Item label="24 Hours" value="24Hours" />
+                        </Picker>
+                    </View>
                 </View>
 
                 {/* Time Picker */}
-                <Text style={styles.label}>⏰ Time</Text>
-                <Picker
-                    selectedValue={time}
-                    onValueChange={(itemValue) => handleTimeChange(itemValue)}
-                >
-                    <Picker.Item label="Select time" value="" />
-                    {shift === "Morning" && <Picker.Item label="07:00 AM - 11:00 AM" value="07:00 AM - 11:00 AM" />}
-                    {shift === "Morning" && <Picker.Item label="07:00 AM - 07:00 PM" value="07:00 AM - 07:00 PM" />}
-                    {shift === "Afternoon" && <Picker.Item label="11:00 AM - 03:00 PM" value="11:00 AM - 03:00 PM" />}
-                    {shift === "Evening" && <Picker.Item label="03:00PM - 07:00PM" value="03:00PM - 07:00PM" />}
-                    {shift === "Night" && <Picker.Item label="07:00 PM - 11:00 PM" value="07:00 PM - 11:00 PM" />}
-                    {shift === "Night" && <Picker.Item label="07:00 PM - 07:00 AM" value="07:00 PM - 07:00 AM" />}
-                    {shift === "Double" && <Picker.Item label="07:00 AM - 03:00 PM" value="07:00 AM - 03:00 PM" />}
-                    {shift === "Double" && <Picker.Item label="11:00 AM - 07:00 PM" value="11:00 AM - 07:00 PM" />}
-                    {shift === "24Hours" && <Picker.Item label="24 Hours" value="24 Hours" />}
-                </Picker>
+                <View style={styles.inputContainer}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.inputIcon}>⏰</Text>
+                        <Text style={styles.label}>Time</Text>
+                    </View>
+                    <View style={styles.pickerContainer}>
+                        <Picker
+                            key={shift} // force re-render when shift changes
+                            selectedValue={time}
+                            onValueChange={handleTimeChange}
+                            style={styles.picker}
+                            enabled={!!shift} // Disable if no shift selected
+                        >
+                            <Picker.Item label="Select time" value="" />
+                            {timeOptions[shift]?.map((t) => (
+                                <Picker.Item key={t} label={t} value={t} />
+                            ))}
+                        </Picker>
+                    </View>
+                </View>
 
-                <Text style={styles.label}>💺 Select Seat</Text>
-                <View style={styles.pickerWrapper}>
-                    <Picker
-                        selectedValue={seatNumber}
-                        onValueChange={(itemValue) => handleSeatChange(itemValue)}
-                    >
-
-                        <Picker.Item label="Select Seat" value="" />
-                        <Picker.Item label="Other" value="Other" />
-                        {vacantSeat.map((seat) => (
-                            <Picker.Item key={seat._id} label={`${seat.seatNumber}`} value={seat.seatNumber} />
-                        ))}
-                    </Picker>
+                {/* Seat Picker */}
+                <View style={styles.inputContainer}>
+                    <View style={styles.labelContainer}>
+                        <Text style={styles.inputIcon}>💺</Text>
+                        <Text style={styles.label}>Select Seat</Text>
+                    </View>
+                    <View style={styles.pickerContainer}>
+                        <Picker
+                            selectedValue={seatNumber}
+                            onValueChange={handleSeatChange}
+                            style={styles.picker}
+                            enabled={!!seatShift} // Disable if no seat shift
+                        >
+                            <Picker.Item label="Select Seat" value="" />
+                            <Picker.Item label="Other" value="Other" />
+                            {vacantSeat.map((seat) => (
+                                <Picker.Item
+                                    key={seat._id}
+                                    label={`Seat ${seat.seatNumber}`}
+                                    value={seat.seatNumber}
+                                />
+                            ))}
+                        </Picker>
+                    </View>
                 </View>
             </View>
-
 
             {/* Payment Information Section */}
             <View style={styles.section}>
@@ -459,17 +609,17 @@ const NewAdmissionForm = () => {
                     placeholder="Enter amount"
                     keyboardType="numeric"
                     icon="💵"
+                    editable={false} // Auto-calculated based on time selection
                 />
             </View>
 
             {/* Submit Button */}
             {loading ? (
-                <>
-                    <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                        <ActivityIndicator size="large" color="#8B5CF6" />
-                        <Text style={{ marginTop: 10, fontSize: 16, color: '#6B7280' }}>Submitting...</Text>
-                    </SafeAreaView>
-                </>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#8B5CF6" />
+                    {/* <Text style={styles.loadingText}>Submitting admission form...</Text>
+                    <Text style={styles.loadingSubText}>Please wait while we process your request</Text> */}
+                </View>
             ) : (
                 <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
                     <Text style={styles.submitIcon}>✅</Text>
@@ -502,6 +652,7 @@ const NewAdmissionForm = () => {
         </ScrollView>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: {

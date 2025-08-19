@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+
 import {
     View,
     Text,
@@ -22,7 +23,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import Loading from '../components/Loading';
 import client from '../service/axiosClient';
 import InvoiceCard from '../components/InvoiceCard';
-
+import { useFocusEffect } from '@react-navigation/native'; // 👈 for screen focus
 const { width, height } = Dimensions.get('window');
 
 const SingleStudentProfile = ({ route, navigation }) => {
@@ -35,8 +36,35 @@ const SingleStudentProfile = ({ route, navigation }) => {
     const [refreshing, setRefreshing] = useState(false);
 
     const passedStudent = route.params?.student;
-
+    const handleEditStudent = useCallback(() => {
+        navigation.navigate('EditStudentProfile', { student });
+    }, [navigation, student]);
     // Initialize student and animations
+
+    // ✅ Fetch latest student details from API
+    const fetchStudentDetails = useCallback(async () => {
+        if (!passedStudent?.sid) return;
+
+        setLoading(true);
+        try {
+            const response = await client.get(`/api/student/getstudentbysid/${passedStudent.sid}`);
+            if (response.data) {
+                setStudent(response.data);
+            }
+        } catch (error) {
+            console.error('Error fetching student details:', error);
+            Alert.alert('Error', 'Failed to fetch latest student details.');
+        } finally {
+            setLoading(false);
+        }
+    }, [passedStudent?.sid]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchStudentDetails();
+            startAnimations();
+        }, [fetchStudentDetails, startAnimations])
+    );
     useEffect(() => {
         if (passedStudent) {
             setStudent(passedStudent);
@@ -110,12 +138,12 @@ const SingleStudentProfile = ({ route, navigation }) => {
 
         try {
             const message = `Student Details:
-Name: ${student.name || 'N/A'}
-SID: ${student.sid || 'N/A'}
-Shift: ${student.shift || 'N/A'}
-Time: ${student.time || 'N/A'}
-Mobile: ${student.mobile || 'N/A'}
-Email: ${student.email || 'N/A'}`;
+        Name: ${student.name || 'N/A'}
+        SID: ${student.sid || 'N/A'}
+        Shift: ${student.shift || 'N/A'}
+        Time: ${student.time || 'N/A'}
+        Mobile: ${student.mobile || 'N/A'}
+        Email: ${student.email || 'N/A'}`;
 
             await Share.share({ message });
         } catch (error) {
@@ -152,17 +180,17 @@ Email: ${student.email || 'N/A'}`;
 
         const body = `Dear ${student.name || 'Student'},
 
-This is a gentle reminder that your library fee is due. Kindly make the payment at your earliest convenience to continue enjoying uninterrupted library services.
+        This is a gentle reminder that your library fee is due. Kindly make the payment at your earliest convenience to continue enjoying uninterrupted library services.
 
-If you have already paid, please ignore this message.
+        If you have already paid, please ignore this message.
 
-Thank you for being a valued member.
+        Thank you for being a valued member.
 
-Regards,  
-Bihari Library  
-📞 Mobile: 9608888400  
-📧 Email: biharilibrary@gmail.com  
-🌐 Website: https://biharilibrary.in/`;
+        Regards,  
+        Bihari Library  
+        📞 Mobile: 9608888400  
+        📧 Email: biharilibrary@gmail.com  
+        🌐 Website: https://biharilibrary.in/`;
 
         const separator = Platform.OS === 'ios' ? '&' : '?';
         const smsUrl = `sms:${student.mobile}${separator}body=${encodeURIComponent(body)}`;
@@ -193,22 +221,22 @@ Bihari Library
 
         const message = `Hello ${student.name || 'Student'}, 👋
 
-This is a reminder from *Bihari Library* regarding your membership (SID: ${student.sid || 'N/A'}).
+        This is a reminder from *Bihari Library* regarding your membership (SID: ${student.sid || 'N/A'}).
 
-📢 *Your monthly fee is due.*  
-Please make the payment at your earliest convenience to continue enjoying uninterrupted services.
+        📢 *Your monthly fee is due.*  
+        Please make the payment at your earliest convenience to continue enjoying uninterrupted services.
 
-🧾 Total Due: ₹${student.paymentDue || '___'}  
-📅 Last Payment Date: ${formattedDate}
+        🧾 Total Due: ₹${student.paymentDue || '___'}  
+        📅 Last Payment Date: ${formattedDate}
 
-You can make the payment by visiting the library or through the available methods.
+        You can make the payment by visiting the library or through the available methods.
 
-📞 9608888400  
-📧 biharilibrary@gmail.com  
-🌐 https://biharilibrary.in/
+        📞 9608888400  
+        📧 biharilibrary@gmail.com  
+        🌐 https://biharilibrary.in/
 
-Thank you for being a part of Bihari Library.  
-– *Bihari Library*`;
+        Thank you for being a part of Bihari Library.  
+        – *Bihari Library*`;
 
         const whatsappUrl = `whatsapp://send?phone=91${student.mobile}&text=${encodeURIComponent(message)}`;
 
@@ -299,12 +327,21 @@ Thank you for being a part of Bihari Library.
 
                     <Text style={styles.headerTitle}>Student Profile</Text>
 
-                    <TouchableOpacity
-                        style={styles.shareButton}
-                        onPress={handleShare}
-                    >
-                        <Ionicons name="share-outline" size={24} color="#fff" />
-                    </TouchableOpacity>
+                    <View style={styles.headerActions}>
+                        <TouchableOpacity
+                            style={styles.editButton}
+                            onPress={handleEditStudent}
+                        >
+                            <Ionicons name="create-outline" size={24} color="#fff" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.shareButton}
+                            onPress={handleShare}
+                        >
+                            <Ionicons name="share-outline" size={24} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </LinearGradient>
 
@@ -539,6 +576,16 @@ Thank you for being a part of Bihari Library.
 };
 
 const styles = StyleSheet.create({
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    editButton: {
+        padding: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        marginRight: 10,
+    },
     container: {
         flex: 1,
         backgroundColor: '#F8FAFC',
