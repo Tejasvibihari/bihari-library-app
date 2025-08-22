@@ -33,8 +33,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "d137ca5d-b08a-41db-bcbc-9209cb3aa65e"
+        "projectId": "8f83574b-76d1-4d1d-a9db-28543ab1dc58"
       }
-    }
+    },
+    "owner": "tejasvikumar"
   }
 }

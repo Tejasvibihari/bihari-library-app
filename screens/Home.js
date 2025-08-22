@@ -185,7 +185,7 @@ const Home = ({ navigation }) => {
 
                 {/* Total Students Card */}
                 <TouchableOpacity
-                    onPress={() => navigateToStudents('all')}
+                    onPress={() => navigateToStudents('student')}
                     activeOpacity={0.8}
                 >
                     <LinearGradient
@@ -218,15 +218,28 @@ const Home = ({ navigation }) => {
                         onPress={() => navigateToStudents('Pending')}
                     />
 
-                    <StatusCard
-                        title="Inactive"
-                        count={studentCounts.inactive}
-                        colors={['#FDA4AF', '#F43F5E', '#E11D48']}
-                        textColor="#9F1239"
-                        onPress={() => navigateToStudents('Inactive')}
-                    />
-                </View>
 
+                </View>
+                {/* Quick Stats */}
+                <View style={styles.quickStats}>
+                    <Text style={styles.sectionHeader}>Quick Overview</Text>
+                    <View style={styles.statsGrid}>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statValue}>{((studentCounts.active / studentCounts.total) * 100 || 0).toFixed(1)}%</Text>
+                            <Text style={styles.statLabel}>Active Rate</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statValue}>{studentCounts.pending}</Text>
+                            <Text style={styles.statLabel}>Need Attention</Text>
+                        </View>
+                        <View style={styles.statItem}>
+                            <Text style={styles.statValue}>
+                                {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </Text>
+                            <Text style={styles.statLabel}>Today</Text>
+                        </View>
+                    </View>
+                </View>
                 <Text style={styles.sectionHeader}>
                     Recent Admission ({recentStudents.length})
                 </Text>
@@ -271,26 +284,7 @@ const Home = ({ navigation }) => {
                     </>
                 )}
 
-                {/* Quick Stats */}
-                <View style={styles.quickStats}>
-                    <Text style={styles.sectionHeader}>Quick Overview</Text>
-                    <View style={styles.statsGrid}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{((studentCounts.active / studentCounts.total) * 100 || 0).toFixed(1)}%</Text>
-                            <Text style={styles.statLabel}>Active Rate</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{studentCounts.pending}</Text>
-                            <Text style={styles.statLabel}>Need Attention</Text>
-                        </View>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>
-                                {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
-                            </Text>
-                            <Text style={styles.statLabel}>Today</Text>
-                        </View>
-                    </View>
-                </View>
+
             </ScrollView>
         </SafeAreaView>
     );
@@ -407,8 +401,8 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: '#5B21B6',
-        marginBottom: 12,
-        marginTop: 8,
+        marginBottom: 5,
+        marginTop: 5,
     },
     pendingList: {
         marginBottom: 16,
@@ -446,7 +440,8 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     quickStats: {
-        marginTop: 8,
+        marginTop: 2,
+        // marginBottom: 70,
     },
     statsGrid: {
         flexDirection: 'row',
