@@ -20,6 +20,26 @@
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+    "intentFilters": [
+      {
+        "action": "android.intent.action.CALL",
+        "category": [
+          "android.intent.category.DEFAULT"
+        ],
+        "data": {
+          "scheme": "tel"
+        }
+      },
+      {
+        "action": "android.intent.action.SENDTO",
+        "category": [
+          "android.intent.category.DEFAULT"
+        ],
+        "data": {
+          "scheme": "sms"
+        }
+      }
+    ],
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/bihari.png",

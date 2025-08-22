@@ -227,7 +227,7 @@ const SingleStudentProfile = ({ route, navigation }) => {
         Please make the payment at your earliest convenience to continue enjoying uninterrupted services.
 
         🧾 Total Due: ₹${student.paymentDue || '___'}  
-        📅 Last Payment Date: ${formattedDate}
+        📅 Last Paid: ${formattedDate}
 
         You can make the payment by visiting the library or through the available methods.
 
@@ -497,7 +497,7 @@ const SingleStudentProfile = ({ route, navigation }) => {
 
                     <InfoCard
                         icon="calendar"
-                        title="Last Payment Date"
+                        title="Last Paid"
                         value={formatDate(student.lastPayment)}
                         iconColor="#8B5CF6"
                     />
