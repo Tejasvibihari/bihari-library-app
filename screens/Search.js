@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Text, View, TextInput, TouchableOpacity, StyleSheet, StatusBar, FlatList } from 'react-native'
 import Ionicons from 'react-native-vector-icons/Ionicons' // Import icon
 import client from '../service/axiosClient';
-import { StudentCard } from '../components/StudentCard';
+import { StudentCardV2 } from '../components/StudentCard';
 
 
 export default function Search() {
@@ -36,7 +36,7 @@ export default function Search() {
         const fetchAllStudent = async () => {
             try {
                 setLoading(true)
-                const response = await client.get('/api/student/getallstudent');
+                const response = await client.get('/api/v2/student/getallstudent');
                 // console.log(response.data)
                 setAllStudent(response.data);
                 setLoading(false);
@@ -90,7 +90,7 @@ export default function Search() {
                         data={filteredStudents}
                         keyExtractor={(item, index) => item.id?.toString() || index.toString()}
                         renderItem={({ item }) => (
-                            <StudentCard student={item} />
+                            <StudentCardV2 student={item} />
                         )}
                         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
                     />

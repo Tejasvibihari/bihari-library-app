@@ -27,13 +27,29 @@ const Menu = () => {
             screen: 'AllInvoice',
             color: '#7C3AED'
         },
+        // {
+        //     id: 5,
+        //     title: 'Seat Allotment',
+        //     subtitle: 'Allot seats to students',
+        //     icon: 'chair',
+        //     screen: 'SeatAllotment',
+        //     color: '#17A2B8'
+        // },
         {
             id: 2,
             title: 'Trash',
             subtitle: 'View All Deleted Students',
             icon: 'person',
-            screen: 'TrashStudent',
+            screen: 'TrashStudentScreen',
             color: '#8B5CF6'
+        },
+        {
+            id: 6,
+            title: 'Legacy Student',
+            subtitle: 'Recently viewed books',
+            icon: 'history',
+            screen: 'LegacyStudent',
+            color: '#7C3AED'
         },
         // {
         //     id: 2,
@@ -67,14 +83,7 @@ const Menu = () => {
         //     screen: 'ReadingListScreen',
         //     color: '#4C1D95'
         // },
-        // {
-        //     id: 6,
-        //     title: 'History',
-        //     subtitle: 'Recently viewed books',
-        //     icon: 'history',
-        //     screen: 'HistoryScreen',
-        //     color: '#7C3AED'
-        // },
+
         // {
         //     id: 7,
         //     title: 'Search',

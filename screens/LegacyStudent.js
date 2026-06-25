@@ -1,79 +1,78 @@
 import React, { useEffect, useState } from 'react'
-import { View, Text, StatusBar, TextInput, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView, FlatList } from 'react-native'
+import { View, Text, StatusBar, SafeAreaView, StyleSheet, TouchableOpacity, ScrollView, FlatList } from 'react-native'
 import TopBar from '../components/TopBar'
-import { StudentCardV2 } from '../components/StudentCard'
+import { StudentCard } from '../components/StudentCard'
 import client from '../service/axiosClient'
 import Loading from '../components/Loading'
-import Ionicons from 'react-native-vector-icons/Ionicons'
+import { LegacyStudentCard } from '../components/LegacyStudentCard'
 
-export default function TrashStudentScreen() {
+
+export default function LegacyStudentScreen() {
     const [activeTab, setActiveTab] = useState('Active')
     const [allStudent, setAllStudent] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchText, setSearchText] = useState('')
 
-    const [filteredStudents, setFilteredStudents] = useState([]);
-
-    useEffect(() => {
-        // If search text is empty, show all students
-        if (searchText.trim() === '') {
-            setFilteredStudents(allStudent);
-            return;
-        }
-
-        const lowerSearch = searchText.toLowerCase();
-
-        const filtered = allStudent.filter(student => {
-            // Match by SID (converted to string for comparison)
-            const matchBySid = student.sid?.toString().includes(lowerSearch);
-
-            // Match by name (case-insensitive)
-            const matchByName = student.name?.toLowerCase().includes(lowerSearch);
-
-            return matchBySid || matchByName;
-        });
-
-        setFilteredStudents(filtered);
-    }, [searchText, allStudent]);
 
     useEffect(() => {
         const fetchAllStudent = async () => {
             try {
-                setLoading(true);
-                // Pass search param only if not empty
-                const params = searchText.trim() ? { search: searchText.trim() } : {};
-                const response = await client.get('/api/v2/student/gettrashstudent', { params });
-                console.log(response)
+                setLoading(true)
+                const response = await client.get('/api/student/getallstudent');
+                // console.log(response.data)
                 setAllStudent(response.data);
-                setFilteredStudents(response.data);
                 setLoading(false);
             } catch (error) {
-                console.log(error)
                 setLoading(false);
             }
-        };
+        }
         fetchAllStudent();
-    }, [searchText]); // re‑fetch whenever searchText changes
+    }, [])
+
+    const getTabStyle = (tab) => {
+        return activeTab === tab ? styles.activeTab : styles.inactiveTab
+    }
+
+    const getTabTextStyle = (tab) => {
+        return activeTab === tab ? styles.activeTabText : styles.inactiveTabText
+    }
+    // if (loading) {
+    //     return (
+
+    //     )
+    // }
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#8B5CF6" />
 
             {/* Top Bar */}
-            <TopBar heading="Trash Students" />
+            <TopBar heading="All Students" />
 
-            <View style={styles.searchContainer}>
-                {/* Search Icon */}
-                <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+            {/* Tab Selector */}
+            <View style={styles.tabContainer}>
+                <TouchableOpacity
+                    style={[styles.tab, getTabStyle('Active')]}
+                    onPress={() => setActiveTab('Active')}
+                >
+                    <Text style={getTabTextStyle('Active')}>Active</Text>
+                    <View style={[styles.indicator, activeTab === 'Active' && styles.activeIndicator]} />
+                </TouchableOpacity>
 
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search By Sid or Name..."
-                    value={searchText}
-                    onChangeText={setSearchText}
-                    returnKeyType="search"
-                    placeholderTextColor="#999"
-                />
+                <TouchableOpacity
+                    style={[styles.tab, getTabStyle('Pending')]}
+                    onPress={() => setActiveTab('Pending')}
+                >
+                    <Text style={getTabTextStyle('Pending')}>Pending</Text>
+                    <View style={[styles.indicator, activeTab === 'Pending' && styles.activeIndicator]} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.tab, getTabStyle('Deactive')]}
+                    onPress={() => setActiveTab('Deactive')}
+                >
+                    <Text style={getTabTextStyle('Deactive')}>Deactive</Text>
+                    <View style={[styles.indicator, activeTab === 'Deactive' && styles.activeIndicator]} />
+                </TouchableOpacity>
             </View>
 
             {/* Content Area */}
@@ -89,20 +88,26 @@ export default function TrashStudentScreen() {
                     />
                 ) : (
                     <FlatList
-                        data={filteredStudents}
+                        data={allStudent.filter(student => student.status === activeTab)}
                         keyExtractor={(item, index) => item.id?.toString() || index.toString()}
                         renderItem={({ item }) => (
-                            <StudentCardV2 student={item} />
+                            <LegacyStudentCard student={item} />
                         )}
                         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
                     />
                 )}
 
+
+
                 <View style={styles.summaryHeader}>
                     <Text style={styles.summaryText}>
-                        {filteredStudents.length} Trash Student{filteredStudents.length !== 1 ? 's' : ''}
+                        {allStudent.filter(student => student.status === activeTab).length} {activeTab} student{allStudent.filter(student => student.status === activeTab).length !== 1 ? 's' : ''}
+
+                        {/* {studentData[activeTab].length} {activeTab} student{studentData[activeTab].length !== 1 ? 's' : ''} */}
                     </Text>
                 </View>
+
+                {/*  */}
             </View>
         </SafeAreaView>
     )
@@ -112,33 +117,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8fafc',
-    },
-    searchContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        margin: 16,
-        marginTop: 20,
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 8,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-    },
-    searchIcon: {
-        marginRight: 8,
-    },
-    searchInput: {
-        flex: 1,
-        paddingLeft: 8,
-        height: 40,
-        fontSize: 16,
-        paddingHorizontal: 0,
-        backgroundColor: '#f8f8f8',
-        borderRadius: 1,
     },
     tabContainer: {
         flexDirection: 'row',

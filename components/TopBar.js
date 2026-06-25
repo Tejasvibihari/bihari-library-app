@@ -4,12 +4,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useNavigation } from '@react-navigation/native';
 
-const TopHeader = ({ heading = "Dashboard", onNotificationPress, onPlusPress }) => {
+const TopHeader = ({ heading = 'Dashboard', onNotificationPress, onPlusPress }) => {
     const navigation = useNavigation();
 
-    // Default handlers if not provided
-    const handleNotificationPress = onNotificationPress || (() => navigation.navigate('Notifications'));
     const handlePlusPress = onPlusPress || (() => navigation.navigate('AdmissionFormScreen'));
+    const handleNotificationPress = onNotificationPress || (() => console.log('Notification pressed'));
+
     return (
         <LinearGradient
             colors={['#8B5CF6', '#A78BFA']}
@@ -18,13 +18,10 @@ const TopHeader = ({ heading = "Dashboard", onNotificationPress, onPlusPress }) 
             <View style={styles.innerHeader}>
                 <Text style={styles.title}>{heading}</Text>
                 <View style={styles.iconsContainer}>
-                    <TouchableOpacity onPress={onPlusPress || (() => handlePlusPress())}>
+                    <TouchableOpacity onPress={handlePlusPress}>
                         <Icon name="add" size={26} color="#fff" />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.bellButton}
-                        onPress={onNotificationPress || (() => console.log('Notification pressed'))}
-                    >
+                    <TouchableOpacity style={styles.bellButton} onPress={handleNotificationPress}>
                         <Icon name="notifications" size={26} color="#fff" />
                     </TouchableOpacity>
                 </View>
@@ -37,8 +34,8 @@ export default TopHeader;
 
 const styles = StyleSheet.create({
     headerContainer: {
-        paddingTop: 20,
-        paddingBottom: 20,
+        // No paddingTop needed — StatusBar is non-translucent so it doesn't overlap
+        paddingVertical: 16,
         paddingHorizontal: 20,
         borderBottomLeftRadius: 25,
         borderBottomRightRadius: 25,

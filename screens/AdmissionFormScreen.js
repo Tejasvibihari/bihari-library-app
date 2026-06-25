@@ -1,868 +1,698 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Alert, ScrollView, StyleSheet, TouchableOpacity, Image, Platform, ActivityIndicator, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+    View, Text, TextInput, Alert, ScrollView, StyleSheet,
+    TouchableOpacity, Image, Platform, ActivityIndicator, Switch
+} from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
-import client from "../service/axiosClient"
-import InputField from '../components/InputField';
-import Loading from '../components/Loading';
+import client from "../service/axiosClient";
 import TopHeader from '../components/TopBar';
 
+// ─── Step Config ───────────────────────────────────────────────
+const STEPS = [
+    { id: 1, label: 'Photo',     icon: '📸' },
+    { id: 2, label: 'Personal',  icon: '👤' },
+    { id: 3, label: 'Admission', icon: '📚' },
+    { id: 4, label: 'Payment',   icon: '💰' },
+    { id: 5, label: 'Review',    icon: '✅' },
+];
+
+// ─── Reusable Field ─────────────────────────────────────────────
+const Field = ({ label, value, placeholder, onChangeText, keyboardType = 'default',
+    multiline = false, editable = true, maxLength, autoCapitalize }) => (
+    <View style={s.fieldWrap}>
+        <Text style={s.fieldLabel}>{label}</Text>
+        <TextInput
+            style={[s.input, multiline && s.inputMulti, !editable && s.inputDisabled]}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor="#A1A1AA"
+            keyboardType={keyboardType}
+            multiline={multiline}
+            numberOfLines={multiline ? 3 : 1}
+            editable={editable}
+            maxLength={maxLength}
+            autoCapitalize={autoCapitalize}
+        />
+    </View>
+);
+
+// ─── Review Row ─────────────────────────────────────────────────
+const ReviewRow = ({ label, value, highlight }) => (
+    <View style={s.reviewRow}>
+        <Text style={s.reviewLabel}>{label}</Text>
+        <Text style={[s.reviewValue, highlight && s.reviewHighlight]}>{value || '—'}</Text>
+    </View>
+);
+
+// ─── Step Indicator ─────────────────────────────────────────────
+const StepBar = ({ current }) => (
+    <View style={s.stepBar}>
+        {STEPS.map((step, idx) => {
+            const done = current > step.id;
+            const active = current === step.id;
+            return (
+                <React.Fragment key={step.id}>
+                    <View style={s.stepItem}>
+                        <View style={[s.stepDot,
+                            done && s.stepDotDone,
+                            active && s.stepDotActive]}>
+                            <Text style={[s.stepDotText, (done || active) && s.stepDotTextActive]}>
+                                {done ? '✓' : step.icon}
+                            </Text>
+                        </View>
+                        <Text style={[s.stepLabel, active && s.stepLabelActive]}>{step.label}</Text>
+                    </View>
+                    {idx < STEPS.length - 1 && (
+                        <View style={[s.stepLine, done && s.stepLineDone]} />
+                    )}
+                </React.Fragment>
+            );
+        })}
+    </View>
+);
+
+// ─── Main Component ──────────────────────────────────────────────
 const NewAdmissionForm = () => {
+    const [step, setStep] = useState(1);
+
+    // Personal
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [mobile, setMobile] = useState('');
     const [father, setFather] = useState('');
     const [guardian, setGuardian] = useState('');
     const [gender, setGender] = useState('Male');
-    const [admissionDate, setAdmissionDate] = useState('');
-    const [shift, setShift] = useState('');
-    const [time, setTime] = useState('');
-    const [paymentAmount, setPaymentAmount] = useState('');
     const [address, setAddress] = useState('');
+
+    // Admission
+    const [admissionDate, setAdmissionDate] = useState('');
+    const [admissionDateObj, setAdmissionDateObj] = useState(new Date());
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [shifts, setShifts] = useState([]);
+    const [selectedShiftCode, setSelectedShiftCode] = useState('');
+    const [shiftAmount, setShiftAmount] = useState(0);
+    const [shiftLabel, setShiftLabel] = useState('');
+    const [seatNumber, setSeatNumber] = useState('');
+    const [vacantSeats, setVacantSeats] = useState([]);
+    const [loadingShifts, setLoadingShifts] = useState(false);
+    const [loadingSeats, setLoadingSeats] = useState(false);
+
+    // Payment
+    const [paymentMade, setPaymentMade] = useState(false);
+    const [payFullCycle, setPayFullCycle] = useState(true);
+    const [amountPaid, setAmountPaid] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('cash');
+    const [paymentNote, setPaymentNote] = useState('');
+    const [fixedDiscountAmount, setFixedDiscountAmount] = useState('');
+    const [fixedDiscountReason, setFixedDiscountReason] = useState('');
+    const [cycleDays, setCycleDays] = useState('30');
+
+    // Image
     const [image, setImage] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
-    const [lastPayment, setLastPayment] = useState('');
-    const [seatNumber, setSeatNumber] = useState('');
-    const [seatShift, setSeatShift] = useState('');
-    const [vacantSeat, setVacantSeat] = useState([]);
 
     const [loading, setLoading] = useState(false);
-    // Date picker states
-    const [showAdmissionDatePicker, setShowAdmissionDatePicker] = useState(false);
-    const [showLastPaymentDatePicker, setShowLastPaymentDatePicker] = useState(false);
-    const [admissionDateObj, setAdmissionDateObj] = useState(new Date());
-    const [lastPaymentDateObj, setLastPaymentDateObj] = useState(new Date());
 
-    // Time options map
-    const timeOptions = {
-        Morning: ["07:00 AM - 11:00 AM", "07:00 AM - 07:00 PM"],
-        Afternoon: ["11:00 AM - 03:00 PM"],
-        Evening: ["03:00PM - 07:00PM"],
-        Night: ["07:00 PM - 11:00 PM", "07:00 PM - 07:00 AM"],
-        Double: ["07:00 AM - 03:00 PM", "11:00 AM - 07:00 PM"],
-        "24Hours": ["24 Hours"]
+    // Computed
+    const discount = parseFloat(fixedDiscountAmount) || 0;
+    const netCycleAmount = Math.max(shiftAmount - discount, 0);
+    const dailyRate = cycleDays && parseInt(cycleDays) > 0
+        ? netCycleAmount / parseInt(cycleDays) : 0;
+    const willPay = paymentMade && parseFloat(amountPaid) > 0;
+
+    function convertTo12Hour(timeStr) {
+        if (!timeStr) return '';
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const h12 = hours % 12 || 12;
+        return `${h12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+    }
+
+    useEffect(() => { fetchShifts(); }, []);
+
+    const fetchShifts = async () => {
+        try {
+            setLoadingShifts(true);
+            const res = await client.get('/api/v2/seat/shifts');
+            setShifts(res.data?.shifts || []);
+        } catch {
+            Alert.alert('Error', 'Failed to load shifts.');
+        } finally { setLoadingShifts(false); }
+    };
+
+    const handleShiftChange = async (shiftCode) => {
+        setSelectedShiftCode(shiftCode);
+        setSeatNumber('');
+        setVacantSeats([]);
+        const selected = shifts.find(s => s.code === shiftCode);
+        if (selected) {
+            setShiftAmount(selected.price || 0);
+            let timeDisplay = '';
+            if (selected.displayTime) {
+                const parts = selected.displayTime.split(' - ').map(t => t.trim());
+                timeDisplay = parts.map(t => convertTo12Hour(t)).join(' - ');
+            } else if (selected.startTime && selected.endTime) {
+                timeDisplay = `${convertTo12Hour(selected.startTime)} – ${convertTo12Hour(selected.endTime)}`;
+            }
+            setShiftLabel(`${selected.label || 'Shift'} (${timeDisplay})`);
+            if (paymentMade && payFullCycle) {
+                const net = Math.max((selected.price || 0) - discount, 0);
+                setAmountPaid(net.toString());
+            }
+            try {
+                setLoadingSeats(true);
+                const res = await client.get('/api/v2/seat/getVacantSeatsByShift', { params: { shiftCode } });
+                setVacantSeats(res.data || []);
+            } catch {
+                Alert.alert('Warning', 'Failed to fetch available seats.');
+            } finally { setLoadingSeats(false); }
+        } else {
+            setShiftAmount(0); setShiftLabel(''); setAmountPaid('');
+        }
+    };
+
+    const onDateChange = (event, selectedDate) => {
+        const d = selectedDate || admissionDateObj;
+        setShowDatePicker(Platform.OS === 'ios');
+        setAdmissionDateObj(d);
+        setAdmissionDate(d.toISOString().split('T')[0]);
     };
 
     const pickImage = async () => {
-        Alert.alert(
-            'Select Image Source',
-            'Choose the image source',
-            [
-                {
-                    text: '📷 Camera',
-                    onPress: async () => {
-                        const { status } = await ImagePicker.requestCameraPermissionsAsync();
-                        if (status !== 'granted') {
-                            Alert.alert('Permission denied', 'Camera permission is required.');
-                            return;
-                        }
-                        const result = await ImagePicker.launchCameraAsync({
-                            allowsEditing: true,
-                            aspect: [1, 1],
-                            quality: 0.7, // Reduced quality for better upload
-                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                        });
-
-                        if (!result.canceled && result.assets && result.assets.length > 0) {
-                            const asset = result.assets[0];
-
-                            // Fixed image object with proper MIME type
-                            const imageObj = {
-                                uri: asset.uri,
-                                type: asset.mimeType || "image/jpeg", // Use mimeType instead of type
-                                name: asset.fileName || `photo_${Date.now()}.jpg`,
-                                size: asset.fileSize || 0
-                            };
-
-                            // console.log('Image selected:', imageObj);
-                            setImage(imageObj);
-                            setImagePreview(asset.uri);
-                            Alert.alert('✅ Success', 'Image captured successfully');
-                        }
-                    },
-                },
-                {
-                    text: '🖼️ Gallery',
-                    onPress: async () => {
-                        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                        if (status !== 'granted') {
-                            Alert.alert('Permission denied', 'Gallery permission is required.');
-                            return;
-                        }
-                        const result = await ImagePicker.launchImageLibraryAsync({
-                            allowsEditing: true,
-                            aspect: [1, 1],
-                            quality: 0.7, // Reduced quality for better upload
-                            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                        });
-
-                        if (!result.canceled && result.assets && result.assets.length > 0) {
-                            const asset = result.assets[0];
-
-                            // Fixed image object with proper MIME type
-                            const imageObj = {
-                                uri: asset.uri,
-                                type: asset.mimeType || "image/jpeg", // Use mimeType instead of type
-                                name: asset.fileName || `photo_${Date.now()}.jpg`,
-                                size: asset.fileSize || 0
-                            };
-
-                            // console.log('Image selected:', imageObj);
-                            setImage(imageObj);
-                            setImagePreview(asset.uri);
-                            Alert.alert('✅ Success', 'Image selected successfully');
-                        }
-                    },
-                },
-                {
-                    text: '❌ Cancel',
-                    style: 'cancel',
-                },
-            ],
-            { cancelable: true }
-        );
+        Alert.alert('Select Image Source', '', [
+            {
+                text: '📷 Camera', onPress: async () => {
+                    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                    if (status !== 'granted') { Alert.alert('Permission denied'); return; }
+                    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+                    if (!result.canceled && result.assets?.length > 0) {
+                        const a = result.assets[0];
+                        setImage({ uri: a.uri, type: a.mimeType || 'image/jpeg', name: a.fileName || `photo_${Date.now()}.jpg`, size: a.fileSize || 0 });
+                        setImagePreview(a.uri);
+                    }
+                }
+            },
+            {
+                text: '🖼️ Gallery', onPress: async () => {
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== 'granted') { Alert.alert('Permission denied'); return; }
+                    const result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+                    if (!result.canceled && result.assets?.length > 0) {
+                        const a = result.assets[0];
+                        setImage({ uri: a.uri, type: a.mimeType || 'image/jpeg', name: a.fileName || `photo_${Date.now()}.jpg`, size: a.fileSize || 0 });
+                        setImagePreview(a.uri);
+                    }
+                }
+            },
+            { text: '❌ Cancel', style: 'cancel' },
+        ], { cancelable: true });
     };
 
-    const handleShiftChange = (selectedShift) => {
-        setShift(selectedShift);
-        setTime(''); // reset time to avoid invalid selection
-        setSeatShift('');
-        setVacantSeat([]); // Clear vacant seats when shift changes
-    };
-
-    const handleTimeChange = async (selectedTime) => {
-        setTime(selectedTime);
-        let amount = 0;
-        let newSeatShift = "";
-
-        switch (selectedTime) {
-            case "07:00 AM - 11:00 AM":
-                amount = 300;
-                newSeatShift = "morning";
-                break;
-            case "11:00 AM - 03:00 PM":
-                amount = 300;
-                newSeatShift = "afternoon";
-                break;
-            case "03:00PM - 07:00PM":
-                amount = 300;
-                newSeatShift = "evening";
-                break;
-            case "07:00 PM - 11:00 PM":
-                amount = 300;
-                newSeatShift = "night";
-                break;
-            case "07:00 PM - 07:00 AM":
-                amount = 500;
-                newSeatShift = "nightLong";
-                break;
-            case "07:00 AM - 03:00 PM":
-                amount = 500;
-                newSeatShift = "doubleMorning";
-                break;
-            case "11:00 AM - 07:00 PM":
-                amount = 500;
-                newSeatShift = "doubleEvening";
-                break;
-            case "07:00 AM - 07:00 PM":
-                amount = 700;
-                newSeatShift = "morningLong";
-                break;
-            case "24 Hours":
-                amount = 1000;
-                newSeatShift = "fullDay";
-                break;
-            default:
-                amount = 0;
-                newSeatShift = "";
+    // ── Per-step validation ──
+    const validateStep = () => {
+        const err = [];
+        if (step === 1 && !image) err.push('Please upload a profile photo.');
+        if (step === 2) {
+            if (!name.trim()) err.push('Full name is required.');
+            if (!email.trim()) err.push('Email is required.');
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) err.push('Invalid email address.');
+            if (!mobile.trim() || mobile.length < 10) err.push('Valid mobile number required.');
+            if (!father.trim()) err.push("Father's name is required.");
+            if (!guardian.trim() || guardian.length < 10) err.push('Valid guardian mobile required.');
+            if (!address.trim()) err.push('Address is required.');
         }
-
-        setPaymentAmount(amount.toString());
-        setSeatShift(newSeatShift);
-
-        if (newSeatShift) {
-            try {
-                setLoading(true);
-                const response = await client.get(`/api/seat/getVacantSeatsByShift`, {
-                    params: { seatShift: newSeatShift },
-                });
-                setVacantSeat(response.data || []);
-                setLoading(false);
-            } catch (error) {
-                setLoading(false);
-                console.error('Error fetching seats:', error.response?.data || error.message);
-                Alert.alert('⚠️ Warning', 'Failed to fetch available seats');
-                setVacantSeat([]);
-            }
+        if (step === 3) {
+            if (!admissionDate) err.push('Admission date is required.');
+            if (!selectedShiftCode) err.push('Please select a shift.');
+            if (!seatNumber) err.push('Please select a seat.');
         }
-    };
-
-    const handleSeatChange = (selectedSeat) => {
-        setSeatNumber(selectedSeat);
-    }
-
-    // Date picker handlers
-    const onAdmissionDateChange = (event, selectedDate) => {
-        const currentDate = selectedDate || admissionDateObj;
-        setShowAdmissionDatePicker(Platform.OS === 'ios');
-        setAdmissionDateObj(currentDate);
-
-        const formattedDate = currentDate.toISOString().split('T')[0];
-        setAdmissionDate(formattedDate);
-    };
-
-    const onLastPaymentDateChange = (event, selectedDate) => {
-        const currentDate = selectedDate || lastPaymentDateObj;
-        setShowLastPaymentDatePicker(Platform.OS === 'ios');
-        setLastPaymentDateObj(currentDate);
-
-        const formattedDate = currentDate.toISOString().split('T')[0];
-        setLastPayment(formattedDate);
-    };
-
-    const showAdmissionDatePickerModal = () => {
-        setShowAdmissionDatePicker(true);
-    };
-
-    // Enhanced form validation
-    const validateForm = () => {
-        const errors = [];
-
-        if (!name.trim()) errors.push('Name is required');
-        if (!email.trim()) errors.push('Email is required');
-        if (!mobile.trim()) errors.push('Mobile number is required');
-        if (!father.trim()) errors.push("Father's name is required");
-        if (!guardian.trim()) errors.push('Guardian mobile number is required');
-        if (!admissionDate) errors.push('Admission date is required');
-        if (!shift) errors.push('Shift is required');
-        if (!time) errors.push('Time is required');
-        if (!paymentAmount) errors.push('Payment amount is required');
-        if (!address.trim()) errors.push('Address is required');
-        if (!image) errors.push('Profile image is required');
-        if (!seatNumber) errors.push('Seat number is required');
-
-        // Email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (email && !emailRegex.test(email)) {
-            errors.push('Please enter a valid email address');
+        if (step === 4 && paymentMade && (!amountPaid || parseFloat(amountPaid) <= 0)) {
+            err.push('Enter a valid payment amount.');
         }
-
-        // Mobile number validation (basic)
-        if (mobile && mobile.length < 10) {
-            errors.push('Mobile number should be at least 10 digits');
-        }
-
-        if (guardian && guardian.length < 10) {
-            errors.push('Guardian mobile number should be at least 10 digits');
-        }
-
-        return errors;
+        return err;
     };
 
-    // console.log("Rerender AdmissionFormScreen");
+    const goNext = () => {
+        const errors = validateStep();
+        if (errors.length > 0) { Alert.alert('⚠️ Incomplete', errors.join('\n')); return; }
+        setStep(prev => Math.min(prev + 1, 5));
+    };
 
+    const goBack = () => setStep(prev => Math.max(prev - 1, 1));
+
+    // ── Submit ──
     const handleSubmit = async () => {
-        // Enhanced validation
-        const validationErrors = validateForm();
-        if (validationErrors.length > 0) {
-            Alert.alert('⚠️ Validation Error', validationErrors.join('\n'));
-            return;
-        }
-
-        // Check image size (optional - you can adjust the limit)
-        if (image && image.size && image.size > 5 * 1024 * 1024) { // 5MB limit
-            Alert.alert('⚠️ Image Too Large', 'Please select an image smaller than 5MB');
-            return;
-        }
-
         setLoading(true);
-
         try {
-            // Create FormData properly for React Native
             const formData = new FormData();
-
-            // Append all text fields
-            formData.append("name", name.trim());
-            formData.append("email", email.trim().toLowerCase());
-            formData.append("mobile", mobile.trim());
-            formData.append("father", father.trim());
-            formData.append("guardian", guardian.trim());
-            formData.append("gender", gender);
-            formData.append("admissionDate", admissionDate);
-            formData.append("shift", shift);
-            formData.append("time", time);
-            formData.append("paymentAmount", paymentAmount.toString());
-            formData.append("address", address.trim());
-            formData.append("seatNumber", seatNumber);
-            formData.append("seatShift", seatShift);
-
-            // Add lastPayment if available
-            if (lastPayment) {
-                formData.append("lastPayment", lastPayment);
+            formData.append('name', name.trim());
+            formData.append('email', email.trim().toLowerCase());
+            formData.append('mobile', mobile.trim());
+            formData.append('father', father.trim());
+            formData.append('guardian', guardian.trim());
+            formData.append('gender', gender);
+            formData.append('admissionDate', admissionDate);
+            formData.append('address', address.trim());
+            formData.append('shiftCode', selectedShiftCode);
+            formData.append('seatNumber', seatNumber);
+            formData.append('cycleDays', cycleDays);
+            if (fixedDiscountAmount) formData.append('fixedDiscountAmount', fixedDiscountAmount);
+            if (fixedDiscountReason) formData.append('fixedDiscountReason', fixedDiscountReason);
+            if (paymentMade && amountPaid && parseFloat(amountPaid) > 0) {
+                formData.append('feePaid', payFullCycle ? 'true' : 'false');
+                formData.append('amountPaid', amountPaid);
+                formData.append('paymentMethod', paymentMethod);
+                if (paymentNote) formData.append('paymentNote', paymentNote);
+            } else {
+                formData.append('feePaid', 'false');
+                formData.append('amountPaid', '0');
             }
-
-            // Handle image properly for React Native
+            // ✅ Correct way to append image in React Native FormData
             if (image) {
-                // React Native specific image object
-                formData.append("image", {
-                    uri: image.uri,
-                    type: image.type || "image/jpeg",
+                formData.append('image', {
+                    uri: Platform.OS === 'android' ? image.uri : image.uri.replace('file://', ''),
+                    type: image.type || 'image/jpeg',
                     name: image.name || `student_${Date.now()}.jpg`,
                 });
             }
 
-            console.log('Submitting form...');
-
-            // CRITICAL FIX: Use fetch instead of axios for FormData in React Native
-            const response = await fetch(`${client.defaults.baseURL}/api/student/create-new-student`, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                    'Accept': 'application/json',
-                },
-            });
-
-            const responseData = await response.json();
-            setLoading(false);
+            // ✅ Use axios instead of fetch — axios handles RN FormData correctly.
+            // Do NOT set Content-Type manually; let axios/RN set the boundary automatically.
+            const response = await client.post(
+                '/api/v2/student/create-new-student',
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        'Accept': 'application/json',
+                    },
+                    transformRequest: (data) => data, // prevent axios from JSON-serialising FormData
+                }
+            );
 
             if (response.status === 201) {
-                Alert.alert(
-                    '🎉 Success',
-                    responseData.message || 'Student admission completed successfully!',
-                    [
-                        {
-                            text: 'OK',
-                            onPress: () => {
-                                resetForm();
-                            }
-                        }
-                    ]
-                );
+                Alert.alert('🎉 Success', response.data?.message || 'Admission completed!', [
+                    { text: 'OK', onPress: resetForm },
+                ]);
             } else {
-                // Handle non-201 responses
-                throw new Error(responseData.message || `Server returned status ${response.status}`);
+                throw new Error(response.data?.message || `Server error ${response.status}`);
             }
-
         } catch (error) {
+            const msg = error?.response?.data?.message
+                || error?.message
+                || 'An unexpected error occurred';
+            Alert.alert('❌ Error', msg);
+        } finally {
             setLoading(false);
-            console.error('Submission error:', error);
-
-            // Check if it's a fetch error vs parsing error
-            if (error.name === 'TypeError' && error.message.includes('Network request failed')) {
-                Alert.alert(
-                    '🌐 Network Error',
-                    'Unable to connect to server. Please check your internet connection and try again.'
-                );
-            } else if (error.message.includes('JSON')) {
-                Alert.alert(
-                    '❌ Server Error',
-                    'Server returned invalid response. Please try again.'
-                );
-            } else {
-                Alert.alert(
-                    '❌ Error',
-                    error.message || 'An unexpected error occurred'
-                );
-            }
         }
     };
 
-    // Helper function to reset form
     const resetForm = () => {
-        setName('');
-        setEmail('');
-        setMobile('');
-        setFather('');
-        setGuardian('');
-        setGender('Male');
-        setAdmissionDate('');
-        setShift('');
-        setTime('');
-        setPaymentAmount('');
-        setAddress('');
-        setImage(null);
-        setImagePreview(null);
-        setLastPayment('');
-        setSeatNumber('');
-        setSeatShift('');
-        setVacantSeat([]);
+        setStep(1);
+        setName(''); setEmail(''); setMobile(''); setFather(''); setGuardian('');
+        setGender('Male'); setAddress(''); setAdmissionDate(''); setAdmissionDateObj(new Date());
+        setSelectedShiftCode(''); setShiftAmount(0); setShiftLabel('');
+        setSeatNumber(''); setVacantSeats([]);
+        setPaymentMade(false); setPayFullCycle(true); setAmountPaid('');
+        setPaymentMethod('cash'); setPaymentNote('');
+        setFixedDiscountAmount(''); setFixedDiscountReason(''); setCycleDays('30');
+        setImage(null); setImagePreview(null);
     };
 
-    const DatePickerField = ({ label, value, onPress, icon }) => (
-        <View style={styles.inputContainer}>
-            <View style={styles.labelContainer}>
-                <Text style={styles.inputIcon}>{icon}</Text>
-                <Text style={styles.label}>{label}</Text>
-            </View>
-            <TouchableOpacity style={styles.dateInput} onPress={onPress}>
-                <Text style={[styles.dateInputText, !value && styles.placeholderStyle]}>
-                    {value || 'Select date (YYYY-MM-DD)'}
-                </Text>
-                <Text style={styles.calendarIcon}>📅</Text>
+    // ── Step Screens ──────────────────────────────────────────────
+
+    const renderStep1 = () => (
+        <View style={s.stepContent}>
+            <Text style={s.stepHeading}>Upload Profile Photo</Text>
+            <Text style={s.stepSubtext}>A clear face photo helps identify the student.</Text>
+            <TouchableOpacity style={s.photoPicker} onPress={pickImage}>
+                {imagePreview ? (
+                    <>
+                        <Image source={{ uri: imagePreview }} style={s.photoPreview} />
+                        <View style={s.photoEditBadge}><Text style={s.photoEditText}>✏️ Change</Text></View>
+                    </>
+                ) : (
+                    <View style={s.photoPlaceholder}>
+                        <Text style={s.photoIcon}>📷</Text>
+                        <Text style={s.photoPlaceholderText}>Tap to upload photo</Text>
+                        <Text style={s.photoPlaceholderSub}>Camera or Gallery · Required</Text>
+                    </View>
+                )}
             </TouchableOpacity>
         </View>
     );
 
-    const GenderPicker = () => (
-        <View style={styles.inputContainer}>
-            <View style={styles.labelContainer}>
-                <Text style={styles.inputIcon}>👤</Text>
-                <Text style={styles.label}>Gender</Text>
+    const renderStep2 = () => (
+        <View style={s.stepContent}>
+            <Text style={s.stepHeading}>Personal Information</Text>
+            <Text style={s.stepSubtext}>Fill in the student's details below.</Text>
+            <Field label="Full Name *" value={name} onChangeText={setName} placeholder="e.g. Rahul Sharma" />
+            <Field label="Email Address *" value={email} onChangeText={setEmail} placeholder="email@example.com" keyboardType="email-address" autoCapitalize="none" />
+            <Field label="Mobile Number *" value={mobile} onChangeText={setMobile} placeholder="10-digit number" keyboardType="phone-pad" maxLength={15} />
+            <Field label="Father's Name *" value={father} onChangeText={setFather} placeholder="Father's full name" />
+            <Field label="Guardian Mobile *" value={guardian} onChangeText={setGuardian} placeholder="Guardian phone number" keyboardType="phone-pad" maxLength={15} />
+
+            <View style={s.fieldWrap}>
+                <Text style={s.fieldLabel}>Gender</Text>
+                <View style={s.pickerBox}>
+                    <Picker selectedValue={gender} onValueChange={setGender} style={s.picker}>
+                        <Picker.Item label="👨 Male" value="Male" />
+                        <Picker.Item label="👩 Female" value="Female" />
+                        <Picker.Item label="🧑 Other" value="Other" />
+                    </Picker>
+                </View>
             </View>
-            <View style={styles.pickerContainer}>
-                <Picker
-                    selectedValue={gender}
-                    style={styles.picker}
-                    onValueChange={(itemValue) => setGender(itemValue)}
-                    dropdownIconColor="#8B5CF6"
-                >
-                    <Picker.Item label="👨 Male" value="Male" />
-                    <Picker.Item label="👩 Female" value="Female" />
-                    <Picker.Item label="🧑 Other" value="Other" />
-                </Picker>
+
+            <Field label="Address *" value={address} onChangeText={setAddress} placeholder="Complete residential address" multiline />
+        </View>
+    );
+
+    const renderStep3 = () => (
+        <View style={s.stepContent}>
+            <Text style={s.stepHeading}>Admission Details</Text>
+            <Text style={s.stepSubtext}>Choose date, shift and seat number.</Text>
+
+            <View style={s.fieldWrap}>
+                <Text style={s.fieldLabel}>Admission Date *</Text>
+                <TouchableOpacity style={s.dateBtn} onPress={() => setShowDatePicker(true)}>
+                    <Text style={admissionDate ? s.dateBtnText : s.dateBtnPlaceholder}>
+                        {admissionDate || 'Select date'}
+                    </Text>
+                    <Text>📅</Text>
+                </TouchableOpacity>
+            </View>
+
+            <View style={s.fieldWrap}>
+                <Text style={s.fieldLabel}>Shift *</Text>
+                <View style={s.pickerBox}>
+                    {loadingShifts ? <ActivityIndicator size="small" color="#7C3AED" style={{ margin: 12 }} /> : (
+                        <Picker selectedValue={selectedShiftCode} onValueChange={handleShiftChange} style={s.picker}>
+                            <Picker.Item label="Select shift…" value="" />
+                            {shifts.map(sh => {
+                                let td = '';
+                                if (sh.displayTime) {
+                                    td = sh.displayTime.split(' - ').map(t => convertTo12Hour(t.trim())).join(' – ');
+                                } else if (sh.startTime && sh.endTime) {
+                                    td = `${convertTo12Hour(sh.startTime)} – ${convertTo12Hour(sh.endTime)}`;
+                                }
+                                return <Picker.Item key={sh.code || sh._id} label={`${sh.label || 'Shift'} · ${td}`} value={sh.code} />;
+                            })}
+                        </Picker>
+                    )}
+                </View>
+                {selectedShiftCode && shiftAmount > 0 && (
+                    <Text style={s.shiftAmountHint}>Fee: ₹{shiftAmount} / cycle</Text>
+                )}
+            </View>
+
+            <View style={s.fieldWrap}>
+                <Text style={s.fieldLabel}>Seat Number *</Text>
+                <View style={[s.pickerBox, !selectedShiftCode && s.pickerDisabled]}>
+                    {loadingSeats ? <ActivityIndicator size="small" color="#7C3AED" style={{ margin: 12 }} /> : (
+                        <Picker selectedValue={seatNumber} onValueChange={setSeatNumber} style={s.picker} enabled={!!selectedShiftCode}>
+                            <Picker.Item label="Select seat…" value="" />
+                            <Picker.Item label="Other" value="Other" />
+                            {vacantSeats.map(seat => (
+                                <Picker.Item key={seat._id} label={`Seat ${seat.seatNumber}`} value={seat.seatNumber} />
+                            ))}
+                        </Picker>
+                    )}
+                </View>
+                {!selectedShiftCode && <Text style={s.hintText}>Select a shift first to see available seats.</Text>}
             </View>
         </View>
     );
 
-    return (
-        <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-            <TopHeader heading='New Admission Form' />
+    const renderStep4 = () => (
+        <View style={s.stepContent}>
+            <Text style={s.stepHeading}>Payment & Billing</Text>
+            <Text style={s.stepSubtext}>Configure fees, discounts and payment details.</Text>
 
-            {/* Profile Image Section */}
-            <View style={styles.imageSection}>
-                <Text style={styles.sectionTitle}>📸 Profile Photo</Text>
-                <TouchableOpacity style={styles.imageContainer} onPress={pickImage}>
-                    {imagePreview ? (
-                        <>
-                            <Image source={{ uri: imagePreview }} style={styles.profileImage} />
-                            <View style={styles.imageOverlay}>
-                                <Text style={styles.overlayText}>✏️</Text>
-                            </View>
-                        </>
-                    ) : (
-                        <View style={styles.placeholderContainer}>
-                            <Text style={styles.cameraIcon}>📷</Text>
-                            <Text style={styles.placeholderText}>Tap to add photo</Text>
-                            <Text style={styles.placeholderSubText}>Required</Text>
+            {/* Discount section */}
+            <View style={s.miniCard}>
+                <Text style={s.miniCardTitle}>🏷️ Discount (optional)</Text>
+                <Field label="Fixed Discount (₹)" value={fixedDiscountAmount} onChangeText={setFixedDiscountAmount} placeholder="0" keyboardType="numeric" />
+                <Field label="Discount Reason" value={fixedDiscountReason} onChangeText={setFixedDiscountReason} placeholder="e.g. Sibling discount" />
+                <Field label="Cycle Days" value={cycleDays} onChangeText={setCycleDays} placeholder="30" keyboardType="numeric" />
+            </View>
+
+            {/* Billing summary mini */}
+            <View style={s.summaryStrip}>
+                <View style={s.summaryStripItem}>
+                    <Text style={s.stripLabel}>Shift Fee</Text>
+                    <Text style={s.stripValue}>₹{shiftAmount}</Text>
+                </View>
+                <Text style={s.stripSep}>–</Text>
+                <View style={s.summaryStripItem}>
+                    <Text style={s.stripLabel}>Discount</Text>
+                    <Text style={[s.stripValue, { color: '#10B981' }]}>₹{discount}</Text>
+                </View>
+                <Text style={s.stripSep}>=</Text>
+                <View style={s.summaryStripItem}>
+                    <Text style={s.stripLabel}>Net</Text>
+                    <Text style={[s.stripValue, { color: '#7C3AED', fontWeight: '800' }]}>₹{netCycleAmount}</Text>
+                </View>
+            </View>
+
+            {/* Payment toggle */}
+            <View style={s.switchRow}>
+                <View>
+                    <Text style={s.switchLabel}>Payment received now?</Text>
+                    <Text style={s.switchSub}>{willPay ? `₹${amountPaid} via ${paymentMethod}` : 'Will be marked as Due'}</Text>
+                </View>
+                <Switch value={paymentMade} onValueChange={(val) => {
+                    setPaymentMade(val);
+                    if (val && selectedShiftCode && payFullCycle) setAmountPaid(netCycleAmount.toString());
+                    else if (!val) setAmountPaid('');
+                }} trackColor={{ false: '#E5E7EB', true: '#DDD6FE' }} thumbColor={paymentMade ? '#7C3AED' : '#9CA3AF'} />
+            </View>
+
+            {paymentMade && (
+                <View style={s.miniCard}>
+                    <Text style={s.miniCardTitle}>💳 Payment Details</Text>
+                    <View style={s.switchRow}>
+                        <Text style={s.switchLabel}>Pay full cycle amount</Text>
+                        <Switch value={payFullCycle} onValueChange={(val) => {
+                            setPayFullCycle(val);
+                            if (val) setAmountPaid(netCycleAmount.toString());
+                            else setAmountPaid('');
+                        }} trackColor={{ false: '#E5E7EB', true: '#DDD6FE' }} thumbColor={payFullCycle ? '#7C3AED' : '#9CA3AF'} />
+                    </View>
+                    <Field label="Amount Paid (₹)" value={amountPaid} onChangeText={setAmountPaid}
+                        placeholder={payFullCycle ? 'Auto-calculated' : 'Enter amount'} keyboardType="numeric" editable={!payFullCycle} />
+                    <View style={s.fieldWrap}>
+                        <Text style={s.fieldLabel}>Payment Method</Text>
+                        <View style={s.pickerBox}>
+                            <Picker selectedValue={paymentMethod} onValueChange={setPaymentMethod} style={s.picker}>
+                                <Picker.Item label="Cash" value="cash" />
+                                <Picker.Item label="UPI" value="upi" />
+                                <Picker.Item label="Card" value="card" />
+                                <Picker.Item label="Bank Transfer" value="bank" />
+                            </Picker>
                         </View>
-                    )}
-                </TouchableOpacity>
-                {/* {image && (
-                    <Text style={styles.imageInfo}>
-                        📁 {image.name} ({image.size ? `${(image.size / 1024).toFixed(1)}KB` : 'Size unknown'})
-                    </Text>
-                )} */}
-            </View>
-
-            {/* Personal Information Section */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>👨‍👩‍👧‍👦 Personal Information</Text>
-
-                <InputField
-                    label="Full Name"
-                    value={name}
-                    onChangeText={setName}
-                    placeholder="Enter your full name"
-                    icon="✏️"
-                />
-                <InputField
-                    label="Email Address"
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="Enter your email"
-                    keyboardType="email-address"
-                    icon="📧"
-                    autoCapitalize="none"
-                />
-                <InputField
-                    label="Mobile Number"
-                    value={mobile}
-                    onChangeText={setMobile}
-                    placeholder="Enter mobile number"
-                    keyboardType="phone-pad"
-                    icon="📱"
-                    maxLength={15}
-                />
-                <InputField
-                    label="Father's Name"
-                    value={father}
-                    onChangeText={setFather}
-                    placeholder="Enter father's name"
-                    icon="👨"
-                />
-                <InputField
-                    label="Guardian Mobile Number"
-                    value={guardian}
-                    onChangeText={setGuardian}
-                    placeholder="Enter guardian Mobile Number"
-                    keyboardType="phone-pad"
-                    icon="🤝"
-                    maxLength={15}
-                />
-
-                <GenderPicker />
-
-                <InputField
-                    label="Address"
-                    value={address}
-                    onChangeText={setAddress}
-                    placeholder="Enter your complete address"
-                    multiline={true}
-                    icon="🏠"
-                />
-            </View>
-
-            {/* Admission Details Section */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📚 Admission Details</Text>
-
-                <DatePickerField
-                    label="Admission Date"
-                    value={admissionDate}
-                    onPress={showAdmissionDatePickerModal}
-                    icon="📅"
-                />
-
-                {/* Shift Picker */}
-                <View style={styles.inputContainer}>
-                    <View style={styles.labelContainer}>
-                        <Text style={styles.inputIcon}>🕐</Text>
-                        <Text style={styles.label}>Shift</Text>
                     </View>
-                    <View style={styles.pickerContainer}>
-                        <Picker
-                            selectedValue={shift}
-                            onValueChange={handleShiftChange}
-                            style={styles.picker}
-                        >
-                            <Picker.Item label="Select shift" value="" />
-                            <Picker.Item label="Morning" value="Morning" />
-                            <Picker.Item label="Afternoon" value="Afternoon" />
-                            <Picker.Item label="Evening" value="Evening" />
-                            <Picker.Item label="Night" value="Night" />
-                            <Picker.Item label="Double Shift" value="Double" />
-                            <Picker.Item label="24 Hours" value="24Hours" />
-                        </Picker>
-                    </View>
+                    <Field label="Payment Note (optional)" value={paymentNote} onChangeText={setPaymentNote} placeholder="Any remarks" />
                 </View>
+            )}
+        </View>
+    );
 
-                {/* Time Picker */}
-                <View style={styles.inputContainer}>
-                    <View style={styles.labelContainer}>
-                        <Text style={styles.inputIcon}>⏰</Text>
-                        <Text style={styles.label}>Time</Text>
-                    </View>
-                    <View style={styles.pickerContainer}>
-                        <Picker
-                            key={shift} // force re-render when shift changes
-                            selectedValue={time}
-                            onValueChange={handleTimeChange}
-                            style={styles.picker}
-                            enabled={!!shift} // Disable if no shift selected
-                        >
-                            <Picker.Item label="Select time" value="" />
-                            {timeOptions[shift]?.map((t) => (
-                                <Picker.Item key={t} label={t} value={t} />
-                            ))}
-                        </Picker>
-                    </View>
-                </View>
+    const renderStep5 = () => (
+        <View style={s.stepContent}>
+            <Text style={s.stepHeading}>Review & Confirm</Text>
+            <Text style={s.stepSubtext}>Check all details before submitting the admission.</Text>
 
-                {/* Seat Picker */}
-                <View style={styles.inputContainer}>
-                    <View style={styles.labelContainer}>
-                        <Text style={styles.inputIcon}>💺</Text>
-                        <Text style={styles.label}>Select Seat</Text>
-                    </View>
-                    <View style={styles.pickerContainer}>
-                        <Picker
-                            selectedValue={seatNumber}
-                            onValueChange={handleSeatChange}
-                            style={styles.picker}
-                            enabled={!!seatShift} // Disable if no seat shift
-                        >
-                            <Picker.Item label="Select Seat" value="" />
-                            <Picker.Item label="Other" value="Other" />
-                            {vacantSeat.map((seat) => (
-                                <Picker.Item
-                                    key={seat._id}
-                                    label={`Seat ${seat.seatNumber}`}
-                                    value={seat.seatNumber}
-                                />
-                            ))}
-                        </Picker>
+            {/* Photo */}
+            <View style={s.reviewPhotoRow}>
+                {imagePreview && <Image source={{ uri: imagePreview }} style={s.reviewPhoto} />}
+                <View style={{ flex: 1, paddingLeft: 14 }}>
+                    <Text style={s.reviewName}>{name || '—'}</Text>
+                    <Text style={s.reviewGender}>{gender}</Text>
+                    <View style={[s.statusBadge, { backgroundColor: willPay ? '#D1FAE5' : '#FEE2E2' }]}>
+                        <Text style={[s.statusText, { color: willPay ? '#065F46' : '#991B1B' }]}>
+                            {willPay ? '✅ Paid' : '⏳ Due'}
+                        </Text>
                     </View>
                 </View>
             </View>
 
-            {/* Payment Information Section */}
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>💰 Payment Information</Text>
-
-                <InputField
-                    label="Payment Amount"
-                    value={paymentAmount}
-                    onChangeText={setPaymentAmount}
-                    placeholder="Enter amount"
-                    keyboardType="numeric"
-                    icon="💵"
-                    editable={false} // Auto-calculated based on time selection
-                />
+            <View style={s.reviewSection}>
+                <Text style={s.reviewSectionTitle}>👤 Personal Information</Text>
+                <ReviewRow label="Full Name" value={name} />
+                <ReviewRow label="Email" value={email} />
+                <ReviewRow label="Mobile" value={mobile} />
+                <ReviewRow label="Father's Name" value={father} />
+                <ReviewRow label="Guardian Mobile" value={guardian} />
+                <ReviewRow label="Gender" value={gender} />
+                <ReviewRow label="Address" value={address} />
             </View>
 
-            {/* Submit Button */}
+            <View style={s.reviewSection}>
+                <Text style={s.reviewSectionTitle}>📚 Admission Details</Text>
+                <ReviewRow label="Admission Date" value={admissionDate} />
+                <ReviewRow label="Shift" value={shiftLabel || selectedShiftCode} highlight />
+                <ReviewRow label="Seat Number" value={seatNumber ? `Seat ${seatNumber}` : ''} highlight />
+            </View>
+
+            <View style={s.reviewSection}>
+                <Text style={s.reviewSectionTitle}>💰 Billing Summary</Text>
+                <ReviewRow label="Shift Fee" value={`₹${shiftAmount}`} />
+                {discount > 0 && <ReviewRow label="Discount" value={`-₹${discount}${fixedDiscountReason ? ` (${fixedDiscountReason})` : ''}`} />}
+                <ReviewRow label="Net Cycle Amount" value={`₹${netCycleAmount}`} highlight />
+                <ReviewRow label="Daily Rate" value={`₹${dailyRate.toFixed(2)}`} />
+                <ReviewRow label="Cycle Days" value={`${cycleDays} days`} />
+                <ReviewRow label="Payment Status" value={willPay ? `Paid ₹${amountPaid} via ${paymentMethod}` : 'Due'} />
+                {paymentNote && <ReviewRow label="Payment Note" value={paymentNote} />}
+            </View>
+
             {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#8B5CF6" />
-                    {/* <Text style={styles.loadingText}>Submitting admission form...</Text>
-                    <Text style={styles.loadingSubText}>Please wait while we process your request</Text> */}
+                <View style={s.loadingBox}>
+                    <ActivityIndicator size="large" color="#7C3AED" />
+                    <Text style={s.loadingText}>Submitting admission…</Text>
                 </View>
             ) : (
-                <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                    <Text style={styles.submitIcon}>✅</Text>
-                    <Text style={styles.submitButtonText}>Submit Admission</Text>
+                <TouchableOpacity style={s.submitBtn} onPress={handleSubmit}>
+                    <Text style={s.submitBtnText}>✅  Confirm & Submit</Text>
                 </TouchableOpacity>
             )}
+        </View>
+    );
 
-            {/* Date Pickers */}
-            {showAdmissionDatePicker && (
+    const renderCurrentStep = () => {
+        switch (step) {
+            case 1: return renderStep1();
+            case 2: return renderStep2();
+            case 3: return renderStep3();
+            case 4: return renderStep4();
+            case 5: return renderStep5();
+            default: return null;
+        }
+    };
+
+    return (
+        <View style={{ flex: 1, backgroundColor: '#F5F3FF' }}>
+            <TopHeader heading="New Admission" />
+            <StepBar current={step} />
+
+            <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+                {renderCurrentStep()}
+
+                {/* Navigation buttons */}
+                <View style={s.navRow}>
+                    {step > 1 && (
+                        <TouchableOpacity style={s.backBtn} onPress={goBack}>
+                            <Text style={s.backBtnText}>← Back</Text>
+                        </TouchableOpacity>
+                    )}
+                    {step < 5 && (
+                        <TouchableOpacity style={[s.nextBtn, step === 1 && { flex: 1 }]} onPress={goNext}>
+                            <Text style={s.nextBtnText}>Next →</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </ScrollView>
+
+            {showDatePicker && (
                 <DateTimePicker
-                    testID="admissionDateTimePicker"
                     value={admissionDateObj}
                     mode="date"
-                    is24Hour={true}
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={onAdmissionDateChange}
+                    onChange={onDateChange}
                 />
             )}
-
-            {showLastPaymentDatePicker && (
-                <DateTimePicker
-                    testID="lastPaymentDateTimePicker"
-                    value={lastPaymentDateObj}
-                    mode="date"
-                    is24Hour={true}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={onLastPaymentDateChange}
-                />
-            )}
-        </ScrollView>
+        </View>
     );
 };
 
+// ─── Styles ──────────────────────────────────────────────────────
+const s = StyleSheet.create({
+    scroll: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 40 },
 
-const styles = StyleSheet.create({
-    container: {
-        flexGrow: 1,
-        backgroundColor: '#F8FAFC',
-        paddingBottom: 30,
-    },
-    headerContainer: {
-        background: 'linear-gradient(135deg, #8B5CF6, #A855F7)',
-        backgroundColor: '#8B5CF6',
-        paddingTop: 60,
-        paddingBottom: 30,
-        paddingHorizontal: 20,
-        borderBottomLeftRadius: 25,
-        borderBottomRightRadius: 25,
-        alignItems: 'center',
-        marginBottom: 20,
-        shadowColor: '#8B5CF6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 8,
-    },
-    headerEmoji: {
-        fontSize: 40,
-        marginBottom: 10,
-    },
-    header: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
-        textAlign: 'center',
-        marginBottom: 5,
-    },
-    subHeader: {
-        fontSize: 16,
-        color: '#E9D5FF',
-        textAlign: 'center',
-    },
-    imageSection: {
-        alignItems: 'center',
-        marginBottom: 25,
-        marginHorizontal: 20,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 25,
-        shadowColor: '#8B5CF6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.15,
-        shadowRadius: 10,
-        elevation: 5,
-        marginTop: 20,
-    },
-    sectionTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1F2937',
-        marginBottom: 20,
-        textAlign: 'center',
-    },
-    imageContainer: {
-        width: 160,
-        height: 160,
-        borderRadius: 80,
-        backgroundColor: '#F3F4F6',
-        borderWidth: 4,
-        borderColor: '#8B5CF6',
-        borderStyle: 'solid',
-        justifyContent: 'center',
-        alignItems: 'center',
-        overflow: 'hidden',
-        position: 'relative',
-    },
-    profileImage: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 76,
-    },
-    imageOverlay: {
-        position: 'absolute',
-        bottom: 5,
-        right: 5,
-        backgroundColor: '#8B5CF6',
-        borderRadius: 15,
-        width: 30,
-        height: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    overlayText: {
-        fontSize: 14,
-        color: '#FFFFFF',
-    },
-    placeholderContainer: {
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    cameraIcon: {
-        fontSize: 50,
-        marginBottom: 10,
-    },
-    placeholderText: {
-        fontSize: 16,
-        color: '#6B7280',
-        fontWeight: '600',
-        marginBottom: 4,
-    },
-    placeholderSubText: {
-        fontSize: 12,
-        color: '#8B5CF6',
-        fontWeight: '500',
-    },
-    section: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 20,
-        padding: 20,
-        marginHorizontal: 20,
-        marginBottom: 20,
-        shadowColor: '#8B5CF6',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-    },
-    inputContainer: {
-        marginBottom: 20,
-    },
-    labelContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    inputIcon: {
-        fontSize: 18,
-        marginRight: 8,
-    },
-    label: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-    },
-    input: {
-        borderWidth: 2,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        padding: 15,
-        fontSize: 16,
-        backgroundColor: '#FFFFFF',
-        color: '#111827',
-    },
-    multilineInput: {
-        height: 80,
-        textAlignVertical: 'top',
-    },
-    pickerContainer: {
-        borderWidth: 2,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        backgroundColor: '#FFFFFF',
-        overflow: 'hidden',
-    },
-    picker: {
-        height: 50,
-        color: '#111827',
-    },
-    dateInput: {
-        borderWidth: 2,
-        borderColor: '#E5E7EB',
-        borderRadius: 12,
-        padding: 15,
-        backgroundColor: '#FFFFFF',
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    dateInputText: {
-        fontSize: 16,
-        color: '#111827',
-        flex: 1,
-    },
-    placeholderStyle: {
-        color: '#A1A1AA',
-    },
-    calendarIcon: {
-        fontSize: 18,
-        marginLeft: 10,
-    },
-    submitButton: {
-        backgroundColor: '#8B5CF6',
-        marginHorizontal: 20,
-        paddingVertical: 18,
-        borderRadius: 15,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#8B5CF6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 6,
-    },
-    submitIcon: {
-        fontSize: 20,
-        marginRight: 10,
-    },
-    submitButtonText: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
+    // Step bar
+    stepBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', paddingVertical: 14, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: '#EDE9FE' },
+    stepItem: { alignItems: 'center', minWidth: 44 },
+    stepDot: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', borderWidth: 2, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' },
+    stepDotActive: { backgroundColor: '#7C3AED', borderColor: '#7C3AED' },
+    stepDotDone: { backgroundColor: '#10B981', borderColor: '#10B981' },
+    stepDotText: { fontSize: 14, color: '#9CA3AF' },
+    stepDotTextActive: { color: '#FFFFFF' },
+    stepLabel: { fontSize: 10, color: '#9CA3AF', marginTop: 4, fontWeight: '500' },
+    stepLabelActive: { color: '#7C3AED', fontWeight: '700' },
+    stepLine: { flex: 1, height: 2, backgroundColor: '#E5E7EB', marginBottom: 12 },
+    stepLineDone: { backgroundColor: '#10B981' },
+
+    // Step content
+    stepContent: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 22, marginTop: 14, shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
+    stepHeading: { fontSize: 22, fontWeight: '800', color: '#1F2937', marginBottom: 4 },
+    stepSubtext: { fontSize: 14, color: '#6B7280', marginBottom: 22 },
+
+    // Fields
+    fieldWrap: { marginBottom: 18 },
+    fieldLabel: { fontSize: 14, fontWeight: '600', color: '#374151', marginBottom: 7 },
+    input: { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 13, fontSize: 15, color: '#111827', backgroundColor: '#FAFAFA' },
+    inputMulti: { height: 90, textAlignVertical: 'top' },
+    inputDisabled: { backgroundColor: '#F3F4F6', color: '#9CA3AF' },
+    pickerBox: { borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, backgroundColor: '#FAFAFA', overflow: 'hidden' },
+    pickerDisabled: { opacity: 0.5 },
+    picker: { height: 50, color: '#111827' },
+    dateBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, padding: 13, backgroundColor: '#FAFAFA' },
+    dateBtnText: { fontSize: 15, color: '#111827' },
+    dateBtnPlaceholder: { fontSize: 15, color: '#A1A1AA' },
+    shiftAmountHint: { marginTop: 6, fontSize: 13, color: '#7C3AED', fontWeight: '600' },
+    hintText: { marginTop: 5, fontSize: 12, color: '#9CA3AF' },
+
+    // Photo
+    photoPicker: { alignSelf: 'center', width: 180, height: 180, borderRadius: 90, backgroundColor: '#F5F3FF', borderWidth: 3, borderColor: '#7C3AED', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginTop: 10 },
+    photoPreview: { width: '100%', height: '100%' },
+    photoEditBadge: { position: 'absolute', bottom: 10, backgroundColor: '#7C3AED', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4 },
+    photoEditText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+    photoPlaceholder: { alignItems: 'center' },
+    photoIcon: { fontSize: 52, marginBottom: 10 },
+    photoPlaceholderText: { fontSize: 15, color: '#7C3AED', fontWeight: '700' },
+    photoPlaceholderSub: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
+
+    // Payment mini cards
+    miniCard: { backgroundColor: '#F9FAFB', borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#EDE9FE' },
+    miniCardTitle: { fontSize: 14, fontWeight: '700', color: '#4B5563', marginBottom: 12 },
+    summaryStrip: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F3FF', borderRadius: 14, padding: 14, marginBottom: 18, borderWidth: 1, borderColor: '#EDE9FE' },
+    summaryStripItem: { flex: 1, alignItems: 'center' },
+    stripLabel: { fontSize: 11, color: '#6B7280', marginBottom: 3 },
+    stripValue: { fontSize: 18, fontWeight: '700', color: '#111827' },
+    stripSep: { fontSize: 20, color: '#D1D5DB', marginHorizontal: 4 },
+    switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, marginBottom: 4 },
+    switchLabel: { fontSize: 15, fontWeight: '600', color: '#374151' },
+    switchSub: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+
+    // Review
+    reviewPhotoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+    reviewPhoto: { width: 80, height: 80, borderRadius: 40, borderWidth: 3, borderColor: '#7C3AED' },
+    reviewName: { fontSize: 20, fontWeight: '800', color: '#111827' },
+    reviewGender: { fontSize: 13, color: '#6B7280', marginBottom: 8 },
+    statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+    statusText: { fontSize: 13, fontWeight: '700' },
+    reviewSection: { backgroundColor: '#F9FAFB', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#F3F4F6' },
+    reviewSectionTitle: { fontSize: 14, fontWeight: '700', color: '#7C3AED', marginBottom: 10 },
+    reviewRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+    reviewLabel: { fontSize: 13, color: '#6B7280', flex: 1 },
+    reviewValue: { fontSize: 13, fontWeight: '600', color: '#111827', flex: 1.5, textAlign: 'right' },
+    reviewHighlight: { color: '#7C3AED' },
+    reviewName_: { fontSize: 20, fontWeight: '800', color: '#1F2937' },
+
+    // Nav buttons
+    navRow: { flexDirection: 'row', marginTop: 18, gap: 12 },
+    backBtn: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+    backBtnText: { fontSize: 16, fontWeight: '700', color: '#4B5563' },
+    nextBtn: { flex: 2, backgroundColor: '#7C3AED', borderRadius: 14, paddingVertical: 16, alignItems: 'center', shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+    nextBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+
+    // Submit
+    submitBtn: { backgroundColor: '#059669', borderRadius: 14, paddingVertical: 18, alignItems: 'center', marginTop: 8, shadowColor: '#059669', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 },
+    submitBtnText: { fontSize: 17, fontWeight: '800', color: '#FFFFFF' },
+    loadingBox: { paddingVertical: 28, alignItems: 'center' },
+    loadingText: { marginTop: 10, fontSize: 15, color: '#6B7280' },
 });
 
 export default NewAdmissionForm;

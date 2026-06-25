@@ -7,6 +7,11 @@
     "orientation": "portrait",
     "icon": "./assets/bihari.png",
     "userInterfaceStyle": "light",
+    "androidStatusBar": {
+      "backgroundColor": "#8B5CF6",
+      "barStyle": "light-content",
+      "translucent": false
+    },
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/bihari.png",
@@ -56,6 +61,10 @@
         "projectId": "8f83574b-76d1-4d1d-a9db-28543ab1dc58"
       }
     },
-    "owner": "tejasvikumar"
+    "owner": "tejasvikumar",
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-status-bar"
+    ]
   }
 }
