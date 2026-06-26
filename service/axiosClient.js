@@ -33,16 +33,16 @@ client.interceptors.request.use(
 // Add response interceptor for better error handling
 client.interceptors.response.use(
     (response) => {
-        // console.log('Response received:', response.status);
+        console.log('Response received:', response.status);
         return response;
     },
     (error) => {
-        // console.error('Response error:', {
-        //     status: error.response?.status,
-        //     data: error.response?.data,
-        //     message: error.message,
-        //     code: error.code
-        // });
+        console.error('Response error:', {
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message,
+            code: error.code
+        });
         return Promise.reject(error);
     }
 );
