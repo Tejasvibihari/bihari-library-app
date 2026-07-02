@@ -2,6 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, Image, TouchableOpacity,
     Animated, Dimensions, StatusBar, SafeAreaView, Share, Alert,
+    KeyboardAvoidingView,
+    Keyboard,
+    TouchableWithoutFeedback,
     Linking, Platform, FlatList, RefreshControl, Modal, TextInput, ActivityIndicator
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -161,6 +164,12 @@ const SingleStudentProfile = ({ route, navigation }) => {
     const [amountPaid, setAmountPaid] = useState('');
     const [payMethod, setPayMethod] = useState('cash');
     const [isPaying, setIsPaying] = useState(false);
+
+    /* delete invoice modal */
+    const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+    const [invoiceToDelete, setInvoiceToDelete] = useState(null);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
 
     /* ─── Preview state ────────────────────────────────────────── */
     const [previewData, setPreviewData] = useState(null);
@@ -334,6 +343,77 @@ const SingleStudentProfile = ({ route, navigation }) => {
             setIsPaying(false);
         }
     }, [student, amountPaid, payMethod, fetchStudent, fetchInvoices]);
+
+    /* ── delete invoice / payment ── */
+    const openDeleteModal = useCallback((invoice) => {
+        setInvoiceToDelete(invoice);
+        setDeleteReason('');
+        setDeleteModalVisible(true);
+    }, []);
+    console.log(invoices[0], "from line no 350 SingleStudentdetails")
+    const closeDeleteModal = useCallback(() => {
+        if (isDeleting) return;
+        setDeleteModalVisible(false);
+        setInvoiceToDelete(null);
+        setDeleteReason('');
+    }, [isDeleting]);
+
+    const handleConfirmDelete = useCallback(async () => {
+        if (!invoiceToDelete) return;
+
+        if (!deleteReason.trim()) {
+            Alert.alert('त्रुटि', 'कृपया हटाने का कारण दर्ज करें।');
+            return;
+        }
+
+        // Invoice references its payment via `payment` (id or populated object)
+        const paymentId = invoiceToDelete.payment || invoiceToDelete.payment;
+
+        if (!paymentId) {
+            Alert.alert('त्रुटि', 'इस इनवॉइस से जुड़ा भुगतान नहीं मिला।');
+            return;
+        }
+
+        setIsDeleting(true);
+        try {
+            const res = await client.post(`/api/v2/payment/delete/${paymentId}`, {
+                reason: deleteReason.trim(),
+                // deletedBy: currentUser?._id, // wire this up to your auth/user context if available
+            });
+
+            if (res.data?.success) {
+                const reasonUsed = deleteReason.trim();
+
+                // Reflect the deleted state immediately so the red warning shows right away
+                setInvoices(prev => prev.map(inv =>
+                    inv._id === invoiceToDelete._id
+                        ? {
+                            ...inv,
+                            isDeleted: true,
+                            deletedAt: new Date().toISOString(),
+                            deleteReason: reasonUsed
+                        }
+                        : inv
+                ));
+
+                setDeleteModalVisible(false);
+                setInvoiceToDelete(null);
+                setDeleteReason('');
+
+                // Sync with server truth (student account gets restored on the backend too)
+                await Promise.all([fetchStudent(), fetchInvoices()]);
+            } else {
+                throw new Error(res.data?.message || 'हटाने में समस्या आई।');
+            }
+        } catch (e) {
+            Alert.alert(
+                'त्रुटि',
+                e?.response?.data?.message || e.message || 'हटाने में समस्या आई।'
+            );
+        } finally {
+            setIsDeleting(false);
+        }
+    }, [invoiceToDelete, deleteReason, fetchStudent, fetchInvoices]);
 
     if (!student) {
         return (
@@ -524,7 +604,9 @@ const SingleStudentProfile = ({ route, navigation }) => {
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={styles.invoiceList}
-                            renderItem={({ item }) => <InvoiceCard invoice={item} />}
+                            renderItem={({ item }) => (
+                                <InvoiceCard invoice={item} onDelete={() => openDeleteModal(item)} />
+                            )}
                         />
                     </>
                 )}
@@ -554,6 +636,7 @@ const SingleStudentProfile = ({ route, navigation }) => {
             </Modal>
 
             {/* ─── Payment Modal with Live Preview ─── */}
+            {/* ─── Payment Modal with Live Preview & Keyboard Avoidance ─── */}
             <Modal
                 visible={payModalVisible}
                 transparent
@@ -564,113 +647,197 @@ const SingleStudentProfile = ({ route, navigation }) => {
                     setPreviewData(null);
                 }}
             >
-                <View style={styles.payOverlay}>
-                    <View style={styles.paySheet}>
-                        <View style={styles.payHandle} />
-
-                        <Text style={styles.payTitle}>भुगतान करें</Text>
-                        <Text style={styles.payStudentName}>{student.name}</Text>
-
-                        {/* Summary strip */}
-                        <View style={styles.paySummary}>
-                            <PaySummaryItem label="बकाया" value={fmt(dueAmount)} color={dueAmount > 0 ? '#EF4444' : '#10B981'} />
-                            <PaySummaryItem label="मासिक" value={fmt(student.billing?.netCycleAmount)} color="#8B5CF6" />
-                            <PaySummaryItem label="शेष दिन" value={student.account?.remainingDays ?? 0} color="#3B82F6" />
-                        </View>
-
-                        <PayInput label="भुगतान राशि *" placeholder="₹0" value={amountPaid} onChangeText={setAmountPaid} keyboardType="numeric" />
-
-                        {/* ─── Preview Section ─── */}
-                        {previewLoading && (
-                            <View style={styles.previewLoading}>
-                                <ActivityIndicator size="small" color="#8B5CF6" />
-                                <Text style={styles.previewLoadingText}>प्रभाव की गणना हो रही है…</Text>
-                            </View>
-                        )}
-
-                        {previewData && !previewLoading && (
-                            <View style={styles.previewCard}>
-                                <Text style={styles.previewTitle}>📊 भुगतान के बाद का प्रभाव</Text>
-
-                                {/* Breakdown equation */}
-                                <View style={styles.previewEquation}>
-                                    <Text style={styles.previewEquationText}>
-                                        {previewData.currentRemainingDays} दिन + {previewData.purchasedDays} दिन = {previewData.newRemainingDays} दिन
-                                    </Text>
-                                </View>
-
-                                <PreviewRow
-                                    label="शेष दिन"
-                                    before={previewData.currentRemainingDays}
-                                    after={previewData.newRemainingDays}
-                                    isPositive={previewData.newRemainingDays > previewData.currentRemainingDays}
-                                />
-                                <PreviewRow
-                                    label="बकाया राशि"
-                                    before={previewData.currentDueAmount}
-                                    after={previewData.newDueAmount}
-                                    isPositive={previewData.newDueAmount < previewData.currentDueAmount}
-                                    isMoney
-                                />
-                                <PreviewRow
-                                    label="बकाया दिन"
-                                    before={previewData.dueDaysBefore}
-                                    after={previewData.dueDaysAfter}
-                                    isPositive={previewData.dueDaysAfter < previewData.dueDaysBefore}
-                                />
-                                {previewData.newValidTill && (
-                                    <View style={styles.previewRow}>
-                                        <Text style={styles.previewLabel}>नई वैधता तिथि</Text>
-                                        <Text style={[styles.previewValue, { color: '#10B981', fontWeight: '700' }]}>
-                                            {fmtDate(previewData.newValidTill)}
-                                        </Text>
-                                    </View>
-                                )}
-                                <View style={styles.previewDivider} />
-                                <View style={styles.previewRow}>
-                                    <Text style={styles.previewLabel}>स्थिति (नई)</Text>
-                                    <Text style={[styles.previewValue, { color: previewData.newPaymentStatus === 'paid' ? '#10B981' : '#EF4444', fontWeight: '700' }]}>
-                                        {previewData.newPaymentStatus === 'paid' ? '✅ Paid' : '⏳ Due'}
-                                    </Text>
-                                </View>
-                            </View>
-                        )}
-
-                        <Text style={styles.payLabel}>भुगतान विधि</Text>
-                        <View style={styles.methodRow}>
-                            {['cash', 'upi', 'card', 'bank'].map(m => (
-                                <TouchableOpacity
-                                    key={m}
-                                    style={[styles.methodBtn, payMethod === m && styles.methodBtnActive]}
-                                    onPress={() => setPayMethod(m)}
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View style={styles.payOverlay}>
+                            <View style={styles.paySheet}>
+                                <ScrollView
+                                    keyboardShouldPersistTaps="handled"
+                                    contentContainerStyle={{ paddingBottom: 20 }}
+                                    showsVerticalScrollIndicator={false}
                                 >
-                                    <Text style={[styles.methodBtnText, payMethod === m && styles.methodBtnTextActive]}>
-                                        {m.toUpperCase()}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
+                                    <View style={styles.payHandle} />
 
-                        <View style={styles.payActions}>
-                            <TouchableOpacity style={styles.payCancelBtn} onPress={() => {
-                                setPayModalVisible(false);
-                                setAmountPaid('');
-                                setPreviewData(null);
-                            }}>
-                                <Text style={styles.payCancelText}>रद्द करें</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.payConfirmBtn, (isPaying || !amountPaid || parseFloat(amountPaid) <= 0) && styles.payBtnDisabled]}
-                                onPress={handlePaymentSubmit}
-                                disabled={isPaying || !amountPaid || parseFloat(amountPaid) <= 0}
-                            >
-                                <Text style={styles.payConfirmText}>
-                                    {isPaying ? 'प्रोसेस हो रहा है…' : 'पुष्टि करें'}
-                                </Text>
-                            </TouchableOpacity>
+                                    <Text style={styles.payTitle}>भुगतान करें</Text>
+                                    <Text style={styles.payStudentName}>{student.name}</Text>
+
+                                    {/* Summary strip */}
+                                    <View style={styles.paySummary}>
+                                        <PaySummaryItem label="बकाया" value={fmt(dueAmount)} color={dueAmount > 0 ? '#EF4444' : '#10B981'} />
+                                        <PaySummaryItem label="मासिक" value={fmt(student.billing?.netCycleAmount)} color="#8B5CF6" />
+                                        <PaySummaryItem label="शेष दिन" value={student.account?.remainingDays ?? 0} color="#3B82F6" />
+                                    </View>
+
+                                    <PayInput
+                                        label="भुगतान राशि *"
+                                        placeholder="₹0"
+                                        value={amountPaid}
+                                        onChangeText={setAmountPaid}
+                                        keyboardType="numeric"
+                                    />
+
+                                    {/* Preview Section */}
+                                    {previewLoading && (
+                                        <View style={styles.previewLoading}>
+                                            <ActivityIndicator size="small" color="#8B5CF6" />
+                                            <Text style={styles.previewLoadingText}>प्रभाव की गणना हो रही है…</Text>
+                                        </View>
+                                    )}
+
+                                    {previewData && !previewLoading && (
+                                        <View style={styles.previewCard}>
+                                            <Text style={styles.previewTitle}>📊 भुगतान के बाद का प्रभाव</Text>
+                                            <View style={styles.previewEquation}>
+                                                <Text style={styles.previewEquationText}>
+                                                    {previewData.currentRemainingDays} दिन + {previewData.purchasedDays} दिन = {previewData.newRemainingDays} दिन
+                                                </Text>
+                                            </View>
+                                            <PreviewRow
+                                                label="शेष दिन"
+                                                before={previewData.currentRemainingDays}
+                                                after={previewData.newRemainingDays}
+                                                isPositive={previewData.newRemainingDays > previewData.currentRemainingDays}
+                                            />
+                                            <PreviewRow
+                                                label="बकाया राशि"
+                                                before={previewData.currentDueAmount}
+                                                after={previewData.newDueAmount}
+                                                isPositive={previewData.newDueAmount < previewData.currentDueAmount}
+                                                isMoney
+                                            />
+                                            <PreviewRow
+                                                label="बकाया दिन"
+                                                before={previewData.dueDaysBefore}
+                                                after={previewData.dueDaysAfter}
+                                                isPositive={previewData.dueDaysAfter < previewData.dueDaysBefore}
+                                            />
+                                            {previewData.newValidTill && (
+                                                <View style={styles.previewRow}>
+                                                    <Text style={styles.previewLabel}>नई वैधता तिथि</Text>
+                                                    <Text style={[styles.previewValue, { color: '#10B981', fontWeight: '700' }]}>
+                                                        {fmtDate(previewData.newValidTill)}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            <View style={styles.previewDivider} />
+                                            <View style={styles.previewRow}>
+                                                <Text style={styles.previewLabel}>स्थिति (नई)</Text>
+                                                <Text style={[styles.previewValue, { color: previewData.newPaymentStatus === 'paid' ? '#10B981' : '#EF4444', fontWeight: '700' }]}>
+                                                    {previewData.newPaymentStatus === 'paid' ? '✅ Paid' : '⏳ Due'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    )}
+
+                                    <Text style={styles.payLabel}>भुगतान विधि</Text>
+                                    <View style={styles.methodRow}>
+                                        {['cash', 'upi', 'card', 'bank'].map(m => (
+                                            <TouchableOpacity
+                                                key={m}
+                                                style={[styles.methodBtn, payMethod === m && styles.methodBtnActive]}
+                                                onPress={() => setPayMethod(m)}
+                                            >
+                                                <Text style={[styles.methodBtnText, payMethod === m && styles.methodBtnTextActive]}>
+                                                    {m.toUpperCase()}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </View>
+
+                                    <View style={styles.payActions}>
+                                        <TouchableOpacity
+                                            style={styles.payCancelBtn}
+                                            onPress={() => {
+                                                setPayModalVisible(false);
+                                                setAmountPaid('');
+                                                setPreviewData(null);
+                                            }}
+                                        >
+                                            <Text style={styles.payCancelText}>रद्द करें</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.payConfirmBtn, (isPaying || !amountPaid || parseFloat(amountPaid) <= 0) && styles.payBtnDisabled]}
+                                            onPress={handlePaymentSubmit}
+                                            disabled={isPaying || !amountPaid || parseFloat(amountPaid) <= 0}
+                                        >
+                                            <Text style={styles.payConfirmText}>
+                                                {isPaying ? 'प्रोसेस हो रहा है…' : 'पुष्टि करें'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </ScrollView>
+                            </View>
                         </View>
-                    </View>
-                </View>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
+            </Modal>
+
+            {/* ─── Delete Invoice Modal ─── */}
+            {/* ─── Delete Invoice Modal with Keyboard Avoidance ─── */}
+            <Modal
+                visible={deleteModalVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={closeDeleteModal}
+            >
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                        <View style={styles.payOverlay}>
+                            <View style={styles.paySheet}>
+                                <ScrollView
+                                    keyboardShouldPersistTaps="handled"
+                                    contentContainerStyle={{ paddingBottom: 20 }}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    <View style={styles.payHandle} />
+
+                                    <View style={styles.deleteIconWrap}>
+                                        <Ionicons name="warning" size={26} color="#EF4444" />
+                                    </View>
+
+                                    <Text style={styles.deleteTitle}>इनवॉइस हटाएं?</Text>
+                                    <Text style={styles.deleteSubtitle}>
+                                        #{invoiceToDelete?.invoiceNumber ?? ''} — यह क्रिया वापस नहीं हो सकती और इससे जुड़ा भुगतान भी हटा दिया जाएगा। छात्र का खाता स्वतः पुनर्स्थापित हो जाएगा।
+                                    </Text>
+
+                                    <View style={styles.payInputWrapper}>
+                                        <Text style={styles.payLabel}>हटाने का कारण *</Text>
+                                        <TextInput
+                                            style={[styles.payInput, styles.deleteReasonInput]}
+                                            placeholder="जैसे: गलती से बना इनवॉइस, डुप्लीकेट भुगतान..."
+                                            placeholderTextColor="#9CA3AF"
+                                            value={deleteReason}
+                                            onChangeText={setDeleteReason}
+                                            multiline
+                                            editable={!isDeleting}
+                                        />
+                                    </View>
+
+                                    <View style={styles.payActions}>
+                                        <TouchableOpacity style={styles.payCancelBtn} onPress={closeDeleteModal} disabled={isDeleting}>
+                                            <Text style={styles.payCancelText}>रद्द करें</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={[styles.deleteConfirmBtn, (isDeleting || !deleteReason.trim()) && styles.payBtnDisabled]}
+                                            onPress={handleConfirmDelete}
+                                            disabled={isDeleting || !deleteReason.trim()}
+                                        >
+                                            <Text style={styles.payConfirmText}>
+                                                {isDeleting ? 'हटाया जा रहा है…' : 'हटाएं'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </ScrollView>
+                            </View>
+                        </View>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );
@@ -726,71 +893,115 @@ const InfoCard = ({ icon, label, value, iconColor = '#8B5CF6' }) => (
     </View>
 );
 
-const InvoiceCard = ({ invoice }) => {
-    const color = invoiceStatusColor(invoice.status);
+/**
+ * InvoiceCard
+ * - Shows a delete (trash) button on active invoices.
+ * - Once `invoice.isDeleted` is true, the card switches to a red, muted
+ *   state and shows a warning banner with the deletion reason/date.
+ */
+const InvoiceCard = ({ invoice, onDelete }) => {
+    const isDeleted = !!invoice.isDeleted;
+    const color = isDeleted ? '#EF4444' : invoiceStatusColor(invoice.status);
+
     return (
-        <View style={[styles.invoiceCard, { borderTopColor: color }]}>
+        <View style={[
+            styles.invoiceCard,
+            { borderTopColor: color },
+            isDeleted && styles.invoiceCardDeleted
+        ]}>
             <View style={styles.invoiceHeader}>
-                <Text style={styles.invoiceNumber}>#{invoice.invoiceNumber}</Text>
-                <View style={[styles.invoiceStatusPill, { backgroundColor: `${color}18`, borderColor: `${color}40` }]}>
-                    <Text style={[styles.invoiceStatusText, { color }]}>{capitalize(invoice.status)}</Text>
-                </View>
-            </View>
-
-            <Text style={styles.invoiceDate}>{fmtDate(invoice.issuedAt)}</Text>
-
-            <View style={styles.invoiceCycle}>
-                <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
-                <Text style={styles.invoiceCycleText}>
-                    {fmtDate(invoice.cycleStart)} → {fmtDate(invoice.cycleEnd)}
+                <Text style={[styles.invoiceNumber, isDeleted && styles.invoiceNumberDeleted]}>
+                    #{invoice.invoiceNumber}
                 </Text>
-            </View>
-
-            <View style={styles.invoiceAmounts}>
-                <InvoiceAmount label="Gross" value={fmt(invoice.grossCycleAmount)} />
-                {invoice.fixedDiscountAmount > 0 && (
-                    <InvoiceAmount label="Fixed disc." value={`-${fmt(invoice.fixedDiscountAmount)}`} color="#10B981" />
-                )}
-                {invoice.oneTimeDiscountAmount > 0 && (
-                    <InvoiceAmount label="One-time" value={`-${fmt(invoice.oneTimeDiscountAmount)}`} color="#10B981" />
-                )}
-                <InvoiceAmount label="Net" value={fmt(invoice.netCycleAmount)} color="#8B5CF6" bold />
-                <InvoiceAmount label="Paid" value={fmt(invoice.amountPaid)} color="#10B981" bold />
-            </View>
-
-            {(invoice.dueAmountAfter > 0 || invoice.advanceAmountAfter > 0) && (
-                <View style={styles.invoiceAfter}>
-                    {invoice.dueAmountAfter > 0 && (
-                        <Text style={styles.invoiceAfterDue}>Due after: {fmt(invoice.dueAmountAfter)}</Text>
-                    )}
-                    {invoice.advanceAmountAfter > 0 && (
-                        <Text style={styles.invoiceAfterAdv}>Advance: {fmt(invoice.advanceAmountAfter)}</Text>
+                <View style={styles.invoiceHeaderRight}>
+                    <View style={[styles.invoiceStatusPill, { backgroundColor: `${color}18`, borderColor: `${color}40` }]}>
+                        <Text style={[styles.invoiceStatusText, { color }]}>
+                            {isDeleted ? 'Deleted' : capitalize(invoice.status)}
+                        </Text>
+                    </View>
+                    {!isDeleted && !!onDelete && (
+                        <TouchableOpacity
+                            style={styles.invoiceDeleteBtn}
+                            onPress={onDelete}
+                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                            <Ionicons name="trash-outline" size={15} color="#EF4444" />
+                        </TouchableOpacity>
                     )}
                 </View>
-            )}
+            </View>
 
-            {invoice.items?.length > 0 && (
-                <View style={styles.invoiceItems}>
-                    {invoice.items.map((it, i) => (
-                        <View key={i} style={styles.invoiceItemRow}>
-                            <Text style={styles.invoiceItemLabel}>{it.label}</Text>
-                            <Text style={[
-                                styles.invoiceItemAmount,
-                                it.kind.includes('discount') && { color: '#10B981' }
-                            ]}>
-                                {it.kind.includes('discount') ? '-' : ''}{fmt(it.amount)}
-                            </Text>
-                        </View>
-                    ))}
+            {isDeleted && (
+                <View style={styles.deletedWarningBox}>
+                    <Ionicons name="warning" size={14} color="#EF4444" style={{ marginTop: 1 }} />
+                    <View style={{ flex: 1 }}>
+                        <Text style={styles.deletedWarningTitle}>यह इनवॉइस हटा दिया गया है</Text>
+                        {!!invoice.deleteReason && (
+                            <Text style={styles.deletedWarningReason}>कारण: {invoice.deleteReason}</Text>
+                        )}
+                        {!!invoice.deletedAt && (
+                            <Text style={styles.deletedWarningDate}>{fmtDate(invoice.deletedAt)}</Text>
+                        )}
+                    </View>
                 </View>
             )}
 
-            {invoice.validTillAfter && (
-                <View style={styles.invoiceFooter}>
-                    <Ionicons name="checkmark-circle" size={12} color="#10B981" />
-                    <Text style={styles.invoiceFooterText}>Valid till {fmtDate(invoice.validTillAfter)}</Text>
+            <View style={isDeleted ? styles.invoiceBodyDeleted : undefined}>
+                <Text style={styles.invoiceDate}>{fmtDate(invoice.issuedAt)}</Text>
+
+                <View style={styles.invoiceCycle}>
+                    <Ionicons name="calendar-outline" size={12} color="#9CA3AF" />
+                    <Text style={styles.invoiceCycleText}>
+                        {fmtDate(invoice.cycleStart)} → {fmtDate(invoice.cycleEnd)}
+                    </Text>
                 </View>
-            )}
+
+                <View style={styles.invoiceAmounts}>
+                    <InvoiceAmount label="Gross" value={fmt(invoice.grossCycleAmount)} />
+                    {invoice.fixedDiscountAmount > 0 && (
+                        <InvoiceAmount label="Fixed disc." value={`-${fmt(invoice.fixedDiscountAmount)}`} color="#10B981" />
+                    )}
+                    {invoice.oneTimeDiscountAmount > 0 && (
+                        <InvoiceAmount label="One-time" value={`-${fmt(invoice.oneTimeDiscountAmount)}`} color="#10B981" />
+                    )}
+                    <InvoiceAmount label="Net" value={fmt(invoice.netCycleAmount)} color="#8B5CF6" bold />
+                    <InvoiceAmount label="Paid" value={fmt(invoice.amountPaid)} color="#10B981" bold />
+                </View>
+
+                {(invoice.dueAmountAfter > 0 || invoice.advanceAmountAfter > 0) && (
+                    <View style={styles.invoiceAfter}>
+                        {invoice.dueAmountAfter > 0 && (
+                            <Text style={styles.invoiceAfterDue}>Due after: {fmt(invoice.dueAmountAfter)}</Text>
+                        )}
+                        {invoice.advanceAmountAfter > 0 && (
+                            <Text style={styles.invoiceAfterAdv}>Advance: {fmt(invoice.advanceAmountAfter)}</Text>
+                        )}
+                    </View>
+                )}
+
+                {invoice.items?.length > 0 && (
+                    <View style={styles.invoiceItems}>
+                        {invoice.items.map((it, i) => (
+                            <View key={i} style={styles.invoiceItemRow}>
+                                <Text style={styles.invoiceItemLabel}>{it.label}</Text>
+                                <Text style={[
+                                    styles.invoiceItemAmount,
+                                    it.kind.includes('discount') && { color: '#10B981' }
+                                ]}>
+                                    {it.kind.includes('discount') ? '-' : ''}{fmt(it.amount)}
+                                </Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {invoice.validTillAfter && (
+                    <View style={styles.invoiceFooter}>
+                        <Ionicons name="checkmark-circle" size={12} color="#10B981" />
+                        <Text style={styles.invoiceFooterText}>Valid till {fmtDate(invoice.validTillAfter)}</Text>
+                    </View>
+                )}
+            </View>
         </View>
     );
 };
@@ -900,8 +1111,13 @@ const styles = StyleSheet.create({
 
     invoiceList: { paddingHorizontal: 18, paddingBottom: 4, gap: 12 },
     invoiceCard: { width: width * 0.72, backgroundColor: '#fff', borderRadius: 14, padding: 14, borderTopWidth: 3, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4 },
+    invoiceCardDeleted: { borderColor: '#FCA5A5', borderWidth: 1, backgroundColor: '#FEF2F2' },
+    invoiceBodyDeleted: { opacity: 0.55 },
     invoiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+    invoiceHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     invoiceNumber: { fontSize: 15, fontWeight: '800', color: '#111827' },
+    invoiceNumberDeleted: { textDecorationLine: 'line-through', color: '#9CA3AF' },
+    invoiceDeleteBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center' },
     invoiceStatusPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20, borderWidth: 1 },
     invoiceStatusText: { fontSize: 11, fontWeight: '700' },
     invoiceDate: { fontSize: 12, color: '#9CA3AF', marginBottom: 6 },
@@ -920,6 +1136,12 @@ const styles = StyleSheet.create({
     invoiceItemAmount: { fontSize: 11, color: '#1F2937', fontWeight: '600' },
     invoiceFooter: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
     invoiceFooterText: { fontSize: 11, color: '#10B981', fontWeight: '500' },
+
+    /* ── Deleted invoice warning banner ── */
+    deletedWarningBox: { flexDirection: 'row', gap: 8, backgroundColor: '#FEE2E2', borderRadius: 8, padding: 8, marginBottom: 10, borderWidth: 1, borderColor: '#FCA5A5' },
+    deletedWarningTitle: { fontSize: 12, fontWeight: '700', color: '#DC2626' },
+    deletedWarningReason: { fontSize: 11, color: '#B91C1C', marginTop: 2 },
+    deletedWarningDate: { fontSize: 10, color: '#B91C1C', marginTop: 2 },
 
     lightboxOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' },
     lightboxClose: { position: 'absolute', top: 50, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center', zIndex: 10 },
@@ -950,6 +1172,13 @@ const styles = StyleSheet.create({
     payConfirmBtn: { flex: 2, paddingVertical: 12, borderRadius: 10, backgroundColor: '#8B5CF6', alignItems: 'center' },
     payConfirmText: { color: '#fff', fontSize: 14, fontWeight: '700' },
     payBtnDisabled: { opacity: 0.45 },
+
+    /* ── Delete invoice modal ── */
+    deleteIconWrap: { alignSelf: 'center', width: 52, height: 52, borderRadius: 26, backgroundColor: '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+    deleteTitle: { fontSize: 17, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 6 },
+    deleteSubtitle: { fontSize: 12.5, color: '#6B7280', textAlign: 'center', marginBottom: 16, lineHeight: 18, paddingHorizontal: 6 },
+    deleteReasonInput: { minHeight: 70, textAlignVertical: 'top', paddingTop: 11 },
+    deleteConfirmBtn: { flex: 2, paddingVertical: 12, borderRadius: 10, backgroundColor: '#EF4444', alignItems: 'center' },
 
     /* ─── Preview styles ── */
     previewLoading: {

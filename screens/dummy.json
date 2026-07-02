@@ -1,73 +1,35 @@
 {
     "__v": 0,
-    "_id": "6a3b8d67df329897c773e38f",
-    "account": {
-        "advanceAmount": 0,
-        "advanceDays": 0,
-        "balanceAmount": 0,
-        "currentCycleEnd": "2026-02-01T00:00:00.000Z",
-        "currentCycleStart": "2026-01-01T00:00:00.000Z",
-        "dueAmount": 0,
-        "dueDays": 0,
-        "dueFrom": null,
-        "lastPaymentAt": "2026-05-12T02:35:47.686Z",
-        "remainingDays": 0,
-        "validTill": "2026-07-01T00:00:00.000Z"
-    },
-    "address": "Chooti Tengerila",
-    "admissionDate": "2025-05-01T00:00:00.000Z",
-    "billing": {
-        "cycleAnchorDate": "2025-05-01T00:00:00.000Z",
-        "cycleDays": 30,
-        "dailyRate": 23.333333333333332,
-        "fixedDiscountAmount": 0,
-        "fixedDiscountReason": "",
-        "netCycleAmount": 700
-    },
-    "createdAt": "2026-06-24T07:55:19.989Z",
-    "email": "arunkumarmallu33@gmail.com",
-    "facebook": "",
-    "father": "Ashok Kumar",
-    "gender": "Male",
-    "guardian": "",
-    "image": "143.jpeg",
-    "instagram": "",
-    "isOnline": false,
-    "legacyStudent": "66c5386f65d040964c28194d",
-    "mobile": "8434304882",
-    "name": "Arun Kumar",
-    "password": "$2b$12$eGVPcs6OYxlg0DgZmRq8QOgyLNKBTLLlVS9B0PgJDEBIfW9nyyHf2",
-    "paymentSummary": {
-        "advanceAmount": 0,
-        "advanceDays": 0,
-        "dueAmount": 0,
-        "dueDays": 0,
-        "dueFrom": null,
-        "paymentStatus": "paid",
-        "remainingDays": 7,
-        "renewal": "warning",
-        "studentStatus": "active"
-    },
-    "seat": {
-        "activeAllotment": "6a3b8d67df329897c773e391",
-        "seat": "6a3b8d6774dcbfc3550bbbac",
-        "seatNumber": "1",
-        "status": "allotted"
-    },
-    "shift": {
-        "amount": 700,
-        "code": "morninglong",
-        "displayTime": "07:00 - 19:00",
-        "label": "Morning Long",
-        "shift": "6a3b8d6774dcbfc3550bbba8"
-    },
-    "sid": 143,
-    "statuses": {
-        "payment": "paid",
-        "renewal": "expired",
-        "seat": "allotted",
-        "student": "active"
-    },
-    "updatedAt": "2026-06-24T16:31:26.926Z",
-    "youtube": ""
+    "_id": "6a3d2272c8923ca926605ccf",
+    "amountPaid": 500,
+    "createdAt": "2026-06-25T12:43:30.120Z",
+    "cycleEnd": "2026-07-25T00:00:00.000Z",
+    "cycleStart": "2026-06-25T00:00:00.000Z",
+    "dueFromAfter": null,
+    "fixedDiscountAmount": 0,
+    "grossCycleAmount": 500,
+    "invoiceNumber": 3,
+    "isDeleted": false,
+    "issuedAt": "2026-06-25T00:00:00.000Z",
+    "items": [
+        {
+            "amount": 500,
+            "kind": "fee",
+            "label": "Double Morning – 30-day cycle"
+        },
+        {
+            "amount": -500,
+            "kind": "payment",
+            "label": "Payment received – 29 days purchased"
+        }
+    ],
+    "netCycleAmount": 500,
+    "payment": "6a3d2272c8923ca926605ccc",
+    "purchasedDays": 29,
+    "remainingDaysAfter": 29,
+    "sid": 575,
+    "status": "paid",
+    "student": "6a3d2272c8923ca926605cc2",
+    "updatedAt": "2026-06-25T12:43:30.120Z",
+    "validTillAfter": "2026-07-24T00:00:00.000Z"
 }

@@ -258,7 +258,8 @@ export const StudentCardV2 = ({ student, onDelete }) => {
         if (isDeleting) return
         setIsDeleting(true)
         try {
-            const response = await client.get(`/api/v2/student/trash?studentId=${student._id}`)
+            const response = await client.delete(`/api/v2/student/delete?studentId=${student._id}`)
+            console.log(response)
             if (response.status === 200) {
                 Alert.alert('सफलता', 'छात्र सफलतापूर्वक हटा दिया गया!', [{ text: 'ठीक है' }])
                 setShowDeleteModal(false)

@@ -20,51 +20,55 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tejasvibihari.biharilibrary",
+      "bundleIdentifier": "com.roottechnology.biharilibrary",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-    "intentFilters": [
-      {
-        "action": "android.intent.action.CALL",
-        "category": [
-          "android.intent.category.DEFAULT"
-        ],
-        "data": {
-          "scheme": "tel"
-        }
-      },
-      {
-        "action": "android.intent.action.SENDTO",
-        "category": [
-          "android.intent.category.DEFAULT"
-        ],
-        "data": {
-          "scheme": "sms"
-        }
-      }
-    ],
     "android": {
+      "package": "com.tejasvibihari.biharilibrary",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/bihari.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "package": "com.tejasvibihari.biharilibrary"
+      "intentFilters": [
+        {
+          "action": "android.intent.action.CALL",
+          "category": [
+            "android.intent.category.DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "tel"
+            }
+          ]
+        },
+        {
+          "action": "android.intent.action.SENDTO",
+          "category": [
+            "android.intent.category.DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "sms"
+            }
+          ]
+        }
+      ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/bihari.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "8f83574b-76d1-4d1d-a9db-28543ab1dc58"
-      }
-    },
-    "owner": "tejasvikumar",
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-status-bar"
-    ]
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "1fea9d36-b97b-4d27-ad87-9dcbe2b6d97a"
+      }
+    },
+    "owner": "tejasvibihari"
   }
 }

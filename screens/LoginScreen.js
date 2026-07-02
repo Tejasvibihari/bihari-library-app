@@ -8,27 +8,31 @@ import {
     SafeAreaView,
     StatusBar,
     Dimensions,
-    Alert
-
+    Alert,
+    ScrollView,
+    KeyboardAvoidingView,
+    Platform,
+    Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import Feather from 'react-native-vector-icons/Feather';
+
+const LibraryLogo = require('../assets/bihari.png');
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import client from '../service/axiosClient';
 import { useNavigation } from '@react-navigation/native';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 const LoginScreen = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [emailFocused, setEmailFocused] = useState(false);
+    const [passwordFocused, setPasswordFocused] = useState(false);
     const navigation = useNavigation();
-
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -37,18 +41,15 @@ const LoginScreen = () => {
         }
 
         setLoading(true);
-        setError(null);
 
         try {
-            const response = await client.post('api/admin/auth/signin', { email, password });
-
+            await client.post('api/admin/auth/signin', { email, password });
             await AsyncStorage.setItem('isLoggedIn', 'true');
             setLoading(false);
-            setError(null);
 
-            Alert.alert('Success', 'Login successful!', [
+            Alert.alert('Welcome', 'Login successful!', [
                 {
-                    text: 'OK',
+                    text: 'Continue',
                     onPress: () => navigation.replace('Main'),
                 },
             ]);
@@ -62,99 +63,159 @@ const LoginScreen = () => {
                 message = error.message;
             }
 
-            setError(message);
             Alert.alert('Login Failed', message);
         }
     };
 
-
-
+    const Wrapper = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+    const wrapperProps =
+        Platform.OS === 'ios'
+            ? { behavior: 'padding', keyboardVerticalOffset: 0, style: { flex: 1 } }
+            : { style: { flex: 1 } };
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#8B5CF6" />
+            <StatusBar barStyle="light-content" backgroundColor="#7C3AED" />
 
-            {/* Purple gradient background */}
             <LinearGradient
-                colors={['#E9D5FF', '#C4B5FD', '#A78BFA']}
+                colors={['#8B5CF6', '#A78BFA', '#C4B5FD']}
                 style={styles.gradientBackground}
             />
 
-            <View style={styles.content}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <Text style={styles.title}>Login</Text>
-                    {/* <TouchableOpacity>
-                        <Text style={styles.signUpText}>
-                            Student Login? <Text style={styles.signUpLink}>Login</Text>
-                        </Text>
-                    </TouchableOpacity> */}
-                </View>
+            <View style={styles.decorCircleLarge} pointerEvents="none" />
+            <View style={styles.decorCircleSmall} pointerEvents="none" />
 
-                {/* Form */}
-                <View style={styles.form}>
-                    {/* Phone Number Input */}
-                    <View style={styles.inputContainer}>
-                        <Icon name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                        <TextInput
-                            style={styles.textInput}
-                            placeholder="Email"
-                            value={email}
-                            onChangeText={setEmail}
-                            keyboardType="email-address"
-                            placeholderTextColor="#9CA3AF"
-                        />
+            <Wrapper {...wrapperProps}>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="none"
+                >
+                    {/* Brand header */}
+                    <View style={styles.brandHeader}>
+                        <View style={styles.logoCircle}>
+                            <Image
+                                source={LibraryLogo}
+                                style={styles.logoImage}
+                                resizeMode="contain"
+                            />
+                        </View>
+                        <Text style={styles.brandTitle}>Bihari Library</Text>
+                        <Text style={styles.brandSubtitle}>Specialized Library Management System</Text>
                     </View>
 
-                    {/* Password Input */}
-                    <View style={styles.inputContainer}>
-                        <Icon name="lock-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                        <TextInput
-                            style={[styles.textInput, styles.passwordInput]}
-                            placeholder="Password"
-                            value={password}
-                            onChangeText={setPassword}
-                            secureTextEntry={!showPassword}
-                            placeholderTextColor="#9CA3AF"
-                        />
-                        <TouchableOpacity
-                            style={styles.forgotPassword}
-                            onPress={() => setShowPassword(!showPassword)}
+                    {/* Form card */}
+                    <View style={styles.card}>
+                        <Text style={styles.cardTitle}>Sign In</Text>
+                        <Text style={styles.cardHint}>Access the librarian &amp; admin portal</Text>
+
+                        {/* Email Input */}
+                        <Text style={styles.label}>Email Address</Text>
+                        <View
+                            style={[
+                                styles.inputContainer,
+                                emailFocused && styles.inputContainerFocused,
+                            ]}
                         >
-                            <Feather
-                                name={showPassword ? 'eye' : 'eye-off'}
+                            <Icon
+                                name="mail-outline"
                                 size={20}
-                                color="#9CA3AF"
+                                color={emailFocused ? '#7C3AED' : '#9CA3AF'}
                                 style={styles.inputIcon}
                             />
+                            <TextInput
+                                style={styles.textInput}
+                                placeholder="you@biharilibrary.org"
+                                value={email}
+                                onChangeText={setEmail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                spellCheck={false}
+                                placeholderTextColor="#9CA3AF"
+                                onFocus={() => setEmailFocused(true)}
+                                onBlur={() => setEmailFocused(false)}
+                            />
+                        </View>
+
+                        {/* Password Input */}
+                        <Text style={styles.label}>Password</Text>
+                        <View
+                            style={[
+                                styles.inputContainer,
+                                passwordFocused && styles.inputContainerFocused,
+                            ]}
+                        >
+                            <Icon
+                                name="lock-outline"
+                                size={20}
+                                color={passwordFocused ? '#7C3AED' : '#9CA3AF'}
+                                style={styles.inputIcon}
+                            />
+                            <TextInput
+                                style={[styles.textInput, styles.passwordInput]}
+                                placeholder="Enter your password"
+                                value={password}
+                                onChangeText={setPassword}
+                                secureTextEntry={!showPassword}
+                                autoCorrect={false}
+                                spellCheck={false}
+                                placeholderTextColor="#9CA3AF"
+                                onFocus={() => setPasswordFocused(true)}
+                                onBlur={() => setPasswordFocused(false)}
+                            />
+                            <TouchableOpacity
+                                style={styles.eyeToggle}
+                                onPress={() => setShowPassword(!showPassword)}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                                <Feather
+                                    name={showPassword ? 'eye' : 'eye-off'}
+                                    size={20}
+                                    color="#9CA3AF"
+                                />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity style={styles.forgotPasswordLink}>
+                            <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                        </TouchableOpacity>
+
+                        {/* Login Button */}
+                        <TouchableOpacity
+                            style={styles.loginButton}
+                            onPress={handleLogin}
+                            disabled={loading}
+                            activeOpacity={0.85}
+                        >
+                            <LinearGradient
+                                colors={['#8B5CF6', '#7C3AED']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.loginButtonGradient}
+                            >
+                                {loading ? (
+                                    <Text style={styles.loginButtonText}>Signing in...</Text>
+                                ) : (
+                                    <>
+                                        <Text style={styles.loginButtonText}>Login</Text>
+                                        <Icon name="arrow-forward" size={20} color="white" />
+                                    </>
+                                )}
+                            </LinearGradient>
                         </TouchableOpacity>
                     </View>
 
-                    {/* Login Button */}
-                    <TouchableOpacity
-                        style={styles.loginButton}
-                        onPress={handleLogin}
-                        disabled={loading}
-                    >
-                        <LinearGradient
-                            colors={['#8B5CF6', '#7C3AED']}
-                            style={styles.loginButtonGradient}
-                        >
-                            {loading ? (
-                                <Text style={styles.loginButtonText}>Logging in...</Text>
-                            ) : (
-                                <>
-                                    <Text style={styles.loginButtonText}>Login</Text>
-                                    <Icon name="arrow-forward" size={20} color="white" />
-                                </>
-                            )}
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                </View>
-
-
-            </View>
+                    {/* Footer */}
+                    <View style={styles.footer}>
+                        <Icon name="menu-book" size={16} color="rgba(255,255,255,0.8)" />
+                        <Text style={styles.footerText}>
+                            Bihari Library &middot; Authorized personnel only
+                        </Text>
+                    </View>
+                </ScrollView>
+            </Wrapper>
         </SafeAreaView>
     );
 };
@@ -166,94 +227,148 @@ const styles = StyleSheet.create({
     },
     gradientBackground: {
         position: 'absolute',
-        bottom: 0,
         top: 0,
         left: 0,
         right: 0,
-        height: height * 0.4,
-
+        height: height * 0.42,
         borderBottomRightRadius: 100,
-
     },
-    content: {
-        flex: 1,
+    decorCircleLarge: {
+        position: 'absolute',
+        top: -60,
+        right: -50,
+        width: 180,
+        height: 180,
+        borderRadius: 90,
+        backgroundColor: 'rgba(255,255,255,0.12)',
+    },
+    decorCircleSmall: {
+        position: 'absolute',
+        top: 90,
+        left: -40,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: 'rgba(255,255,255,0.10)',
+    },
+    scrollContent: {
+        flexGrow: 1,
         paddingHorizontal: 24,
+        paddingTop: height * 0.08,
+        paddingBottom: 32,
+    },
+    brandHeader: {
+        alignItems: 'center',
+        marginBottom: 28,
+    },
+    logoCircle: {
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        backgroundColor: 'white',
         justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 14,
+        shadowColor: '#4C1D95',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        elevation: 8,
+        overflow: 'hidden',
     },
-    header: {
-        marginBottom: 40,
+    logoImage: {
+        width: 78,
+        height: 78,
     },
-    title: {
-        fontSize: 32,
+    brandTitle: {
+        fontSize: 26,
         fontWeight: 'bold',
+        color: '#FFFFFF',
+        letterSpacing: 0.3,
+    },
+    brandSubtitle: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.9)',
+        marginTop: 4,
+        fontWeight: '500',
+    },
+    card: {
+        backgroundColor: 'white',
+        borderRadius: 24,
+        paddingHorizontal: 22,
+        paddingVertical: 26,
+        shadowColor: '#4C1D95',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    cardTitle: {
+        fontSize: 20,
+        fontWeight: '700',
         color: '#1F2937',
-        marginBottom: 8,
+        marginBottom: 4,
     },
-    signUpText: {
-        fontSize: 14,
+    cardHint: {
+        fontSize: 13,
         color: '#6B7280',
+        marginBottom: 22,
     },
-    signUpLink: {
-        color: '#8B5CF6',
+    label: {
+        fontSize: 12,
         fontWeight: '600',
-    },
-    form: {
-        marginBottom: 40,
+        color: '#6B7280',
+        marginBottom: 6,
+        marginLeft: 2,
+        textTransform: 'uppercase',
+        letterSpacing: 0.4,
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'white',
+        backgroundColor: '#F9FAFB',
         borderRadius: 12,
         marginBottom: 16,
-        paddingHorizontal: 16,
-        paddingVertical: 4,
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
+        paddingHorizontal: 14,
+        borderWidth: 1.5,
+        borderColor: '#F3F4F6',
     },
-    countryCode: {
-        fontSize: 16,
-        color: '#1F2937',
-        marginRight: 8,
-        fontWeight: '500',
+    inputContainerFocused: {
+        borderColor: '#8B5CF6',
+        backgroundColor: '#FFFFFF',
     },
     inputIcon: {
-        marginRight: 12,
+        marginRight: 10,
     },
     textInput: {
         flex: 1,
-        fontSize: 16,
+        fontSize: 15,
         color: '#1F2937',
-        paddingVertical: 16,
+        paddingVertical: 14,
     },
     passwordInput: {
-        paddingRight: 80,
+        paddingRight: 34,
     },
-    forgotPassword: {
+    eyeToggle: {
         position: 'absolute',
-        right: 16,
+        right: 14,
+    },
+    forgotPasswordLink: {
+        alignSelf: 'flex-end',
+        marginBottom: 20,
+        marginTop: -6,
     },
     forgotPasswordText: {
-        color: '#8B5CF6',
-        fontSize: 12,
+        color: '#7C3AED',
+        fontSize: 13,
         fontWeight: '600',
     },
     loginButton: {
-        borderRadius: 12,
-        marginTop: 8,
-        shadowColor: '#8B5CF6',
-        shadowOffset: {
-            width: 0,
-            height: 4,
-        },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        borderRadius: 14,
+        shadowColor: '#7C3AED',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
         elevation: 6,
     },
     loginButtonGradient: {
@@ -261,35 +376,26 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 16,
-        borderRadius: 12,
+        borderRadius: 14,
     },
     loginButtonText: {
         color: 'white',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
         marginRight: 8,
+        letterSpacing: 0.3,
     },
-    socialLogin: {
+    footer: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
-        gap: 20,
+        marginTop: 26,
+        gap: 6,
     },
-    socialButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: 'white',
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
+    footerText: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.85)',
+        fontWeight: '500',
     },
 });
 
